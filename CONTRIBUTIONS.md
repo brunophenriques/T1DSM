@@ -18,7 +18,7 @@ Its purpose is to ensure transparency, accountability and recognition of individ
 
 | Date | Member | Contribution | Evidence |
 |---|---|---|---|
-| 2026-11-09 | Bruno Henriques | Set up the team collaboration workflow, including branching strategy, commit conventions, Pull Request guidelines, and contribution tracking. | [PR #1](https://github.com/brunophenriques/T1DSM/pull/1) |
+| 2026-11-09 | Bruno Henriques | Set up the team collaboration workflow, including branching strategy, commit conventions, Pull Request guidelines, and contribution tracking. | [PR #1](https://github.com/brunophenriques/T1DSM/pull/1) [PR #2](https://github.com/brunophenriques/T1DSM/pull/2) |
 
 ## Guidelines
 
