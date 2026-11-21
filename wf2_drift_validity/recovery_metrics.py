@@ -95,12 +95,17 @@ def accuracy_recovery(
     if not pre.any() or not times.size:
         return result
 
-    pre_mean = np.mean(accuracy[pre])
-    trough_mask = times <= drift_end + trough_samples
-    if not trough_mask.any():
-        return result
+    pre_mean = np.nanmean(accuracy[pre])
 
-    trough_idx = int(np.argmin(values[trough_mask]))
+    if trough_samples is None:
+        m = len(values)
+    else:
+        m = max(
+            1,
+            int(np.sum(times <= drift_end + trough_samples)),
+        )
+
+    trough_idx = int(np.argmin(values[:m]))
 
     result["accuracy_drop"] = float(
         pre_mean - values[trough_idx]
@@ -117,6 +122,7 @@ def accuracy_recovery(
         recovery = float(
             times[trough_idx + index] - drift_end
         )
+
         result.update(
             recovery=recovery,
             recovered=True,

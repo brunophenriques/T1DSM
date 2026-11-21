@@ -81,22 +81,31 @@ def analyze(arr: dict, truth, drift_points, a: dict, every: int, drift_widths=No
                 out[f"recovered/{name}/drift{n}"] = float(result["recovered"])
                 out[f"recovery_censored/{name}/drift{n}"] = result["censored_time"]
 
-        pre_samples = a.get("acc_pre_samples", 5 * every)       # default = first version (5 checkpoints)
-        acc_consec = a.get("acc_consecutive", 1)                 # default = first version (no persistence)
-        trough_samples = a.get("acc_trough_samples")             # default = first version (whole segment)
-        for n in range(1, len(dps) + 1):                         # accuracy recovery (separate from ranking recovery)
-            base, end, ts = tr_end[n - 1], next_tr[n], tr_start[n - 1]
-            pre = _nm(acc[(t <= ts) & (t > ts - pre_samples)])
-            idx = np.where((t > base) & (t < end))[0]
-            if idx.size == 0:
-                out[f"acc/drop/drift{n}"] = out[f"acc/recovery/drift{n}"] = NAN
-                out[f"acc/recovered/drift{n}"] = 0.0
-                continue
-            post = acc[idx]
-            m = idx.size if trough_samples is None else max(1, int(np.sum(t[idx] <= base + trough_samples)))
-            jm = int(np.argmin(post[:m]))
-            out[f"acc/drop/drift{n}"] = float(pre - post[jm])
-            j = first_sustained(post[jm:] >= pre - a["acc_tol"], acc_consec)
-            out[f"acc/recovery/drift{n}"] = NAN if j is None else float(t[idx[jm + j]] - base)
-            out[f"acc/recovered/drift{n}"] = 0.0 if j is None else 1.0
+        pre_samples = a.get("acc_pre_samples", 5 * every)
+        acc_consec = a.get("acc_consecutive", 1)
+        trough_samples = a.get("acc_trough_samples")
+
+        for n in range(1, len(dps) + 1):
+            base = tr_end[n - 1]
+            end = next_tr[n]
+            ts = tr_start[n - 1]
+
+            mask = t < end
+
+            result = accuracy_recovery(
+                t[mask],
+                acc[mask],
+                drift_start=ts,
+                drift_end=base,
+                pre_samples=pre_samples,
+                trough_samples=trough_samples,
+                tolerance=a["acc_tol"],
+                consecutive=acc_consec,
+            )
+
+            out[f"acc/drop/drift{n}"] = result["accuracy_drop"]
+            out[f"acc/recovery/drift{n}"] = result["recovery"]
+            out[f"acc/recovered/drift{n}"] = float(result["recovered"])
+            out[f"acc/recovery_censored/drift{n}"] = result["censored_time"]
+
     return out
