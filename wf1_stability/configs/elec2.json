@@ -17,7 +17,13 @@
     "type": "river",
     "name": "Elec2",
     "n": 10000,
-    "scaling": "none"
+    "scaling": "domain",
+    "bounds": {
+      "day": [
+        1,
+        7
+      ]
+    }
   },
   "analysis": {
     "lags_samples": [

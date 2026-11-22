@@ -5,7 +5,7 @@
    wf1_stability/fig2a_jaccard_lag200.png/.pdf
 Run from the repo root:  python wf1_stability/analyze_sq1.py
 """
-import csv, json, sys, warnings
+import argparse, csv, json, sys, warnings
 from pathlib import Path
 import numpy as np
 
@@ -68,7 +68,7 @@ def summarize(c):
     return out
 
 
-def write_tables(S):
+def write_tables(S, sfx=""):
     L = []
     L += ["## SQ1: stability of the global relevance weights G (stationary segments, buffer flushed)", "",
           f"Primary metric: top-k Jaccard at lag {PRIMARY_LAG} samples (no window overlap). Mean ± SD over runs; CI = 95%.", "",
@@ -96,15 +96,15 @@ def write_tables(S):
           "| condition | " + " | ".join(f"lag {l} ({max(0, 100 - 100 * l // 200)}% overlap)" for l in LAGS) + " |", "|---|" + "---|" * len(LAGS)]
     for lab, s in S.items():
         L.append(f"| {lab} | " + " | ".join(fmt(s[f"jaccard@{l}"]["mean"]) for l in LAGS) + " |")
-    (OUT / "table1_sq1.md").write_text("\n".join(L) + "\n", encoding="utf-8")
-    with open(OUT / "sq1_per_run.csv", "w", newline="") as f:
+    (OUT / f"table1_sq1{sfx}.md").write_text("\n".join(L) + "\n", encoding="utf-8")
+    with open(OUT / f"sq1_per_run{sfx}.csv", "w", newline="") as f:
         keys = ["condition"] + list(next(iter(S.values()))["rows"][0].keys()); w = csv.DictWriter(f, keys); w.writeheader()
         for lab, s in S.items():
             for r in s["rows"]:
                 w.writerow({"condition": lab, **r})
 
 
-def figure(data):
+def figure(data, sfx=""):
     import matplotlib; matplotlib.use("Agg"); import matplotlib.pyplot as plt
     fig, ax = plt.subplots(figsize=(7, 3.4))
     for lab, c in data.items():
@@ -123,18 +123,22 @@ def figure(data):
     ax.set_xlabel("samples"); ax.set_ylabel(f"top-k Jaccard, lag {PRIMARY_LAG}"); ax.set_ylim(-0.02, 1.05)
     ax.grid(alpha=0.3); ax.legend(fontsize=7, loc="lower left")
     ax.set_title(f"Figure 2a: stability of the top-k relevant set (rolling mean over {SMOOTH_CK} checkpoints; band = ±1 SD over runs)", fontsize=7)
-    fig.tight_layout(); fig.savefig(OUT / "fig2a_jaccard_lag200.png", dpi=200); fig.savefig(OUT / "fig2a_jaccard_lag200.pdf"); plt.close(fig)
+    fig.tight_layout(); fig.savefig(OUT / f"fig2a_jaccard_lag200{sfx}.png", dpi=200); fig.savefig(OUT / f"fig2a_jaccard_lag200{sfx}.pdf"); plt.close(fig)
 
 
 def main():
-    data = {lab: load(folder) for lab, folder in CONDITIONS.items()}
+    ap = argparse.ArgumentParser(description="SQ1 analysis")
+    ap.add_argument("--suffix", default="", help="e.g. _nodate: use the Elec2 runs made without the `date` feature")
+    sfx = ap.parse_args().suffix
+    conds = {lab: (folder + sfx if lab.startswith("Elec2") else folder) for lab, folder in CONDITIONS.items()}
+    data = {lab: load(folder) for lab, folder in conds.items()}
     missing = [lab for lab, d in data.items() if d is None]
     if missing:
         print("No results yet for:", ", ".join(missing), "(skipped)")
     data = {k: v for k, v in data.items() if v is not None}
     S = {lab: summarize(c) for lab, c in data.items()}
-    write_tables(S); figure(data)
-    print((OUT / "table1_sq1.md").read_text(encoding="utf-8"))
+    write_tables(S, sfx); figure(data, sfx)
+    print((OUT / f"table1_sq1{sfx}.md").read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

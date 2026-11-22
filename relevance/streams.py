@@ -56,7 +56,8 @@ def expanding_minmax(X: np.ndarray) -> np.ndarray:
     return (X - lo) / den
 
 
-def load_river_stream(name: str, n_max: int, scaling: str = "expanding") -> Stream:
+def load_river_stream(name: str, n_max: int, scaling: str = "expanding", bounds: dict | None = None,
+                      drop: list | None = None) -> Stream:
     from river import datasets  # lazy import
     ds = getattr(datasets, name)()
     it = iter(ds)
@@ -70,7 +71,18 @@ def load_river_stream(name: str, n_max: int, scaling: str = "expanding") -> Stre
     uniq = list(dict.fromkeys(labels))
     y_int = np.array([uniq.index(v) for v in labels], dtype=int)
     X = np.asarray(rows, dtype=float)
-    if scaling == "expanding":
+    if drop:                                   # e.g. a monotone time index such as Elec2's `date`
+        keep = [j for j, n in enumerate(names) if n not in drop]
+        X, names = X[:, keep], [names[j] for j in keep]
+    if scaling == "domain":
+        # fixed, documented per-feature bounds (default [0,1]); order-independent, so the shuffled control sees the same scaling
+        lo = np.array([(bounds or {}).get(n, [0.0, 1.0])[0] for n in names], dtype=float)
+        hi = np.array([(bounds or {}).get(n, [0.0, 1.0])[1] for n in names], dtype=float)
+        X = (X - lo) / (hi - lo)
+        bad = [names[j] for j in range(X.shape[1]) if X[:, j].min() < -1e-9 or X[:, j].max() > 1 + 1e-9]
+        if bad:
+            raise ValueError(f"features outside their declared bounds: {bad}; add them to 'bounds'")
+    elif scaling == "expanding":
         mono = [names[j] for j in range(X.shape[1])
                 if np.ptp(X[:, j]) > 0 and (np.all(np.diff(X[:, j]) >= 0) or np.all(np.diff(X[:, j]) <= 0))]
         if mono:
@@ -184,6 +196,7 @@ def build_stream(scfg: dict, seed: int) -> Stream:
         return agrawal_drift_stream(n=scfg["n"], drift_at=scfg.get("drift_at"),
                                     f_before=scfg["f_before"], f_after=scfg["f_after"], seed=seed)
     if scfg["type"] == "river":
-        st = load_river_stream(scfg["name"], scfg["n"], scfg.get("scaling", "expanding"))
+        st = load_river_stream(scfg["name"], scfg["n"], scfg.get("scaling", "expanding"),
+                               scfg.get("bounds"), scfg.get("drop"))
         return shuffle_control(st, seed) if scfg.get("shuffle") else st
     raise ValueError(f"unknown stream type {scfg['type']}")

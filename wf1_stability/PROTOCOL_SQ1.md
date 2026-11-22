@@ -24,13 +24,19 @@ top-k switches per 1,000 samples. Implemented in `relevance/stability.py`, teste
 |---|---|---|---|
 | S3 | stationary synthetic, relevant features {0, 1} | 10 seeds | stream generator (model is deterministic) |
 | Elec2 | first 10,000 rows, original order | 1 | none between runs (deterministic model, fixed stream) |
-| Elec2 shuffled | same rows, random permutation | N shuffles (seed = permutation) | the permutation |
+| Elec2 shuffled | same rows, random permutation | N = 30 shuffles (seed = permutation) | the permutation |
 S3 is a sanity check only: a stationary synthetic stream has no temporal structure, so top-k Jaccard is expected to be about 1.
 
 ## Preprocessing
-Elec2 must be used **without** expanding min-max scaling if its features already lie in [0, 1] (check with
-`python wf1_stability/check_elec2_ranges.py`): expanding scaling turns a monotone feature such as `date` into a constant in the
-original order but not in the shuffled order, which would bias the comparison. Config: `"scaling": "none"`.
+`check_elec2_ranges.py` (first 10,000 rows) showed that river's Elec2 is **not** fully normalised: `day` runs 1 to 7, `date` is
+monotone with a tiny range (0 to 0.03), and `vicprice`, `vicdemand`, `transfer` are constant over this slice.
+* Whole-stream min-max (the baseline's `min_max_scale`) uses future information.
+* Expanding min-max turns the monotone `date` into a constant in the original order but not in the shuffled order, which would bias the comparison.
+* Used instead: **fixed domain scaling** (`"scaling": "domain"`): `day` -> (day - 1) / 6, all other features keep their [0, 1] scale.
+  It is leak-free and independent of row order, so the shuffled control receives exactly the same preprocessing.
+* Sensitivity analysis: every Elec2 result is also run **without `date`** (`*_nodate` configs, `analyze_sq1.py --suffix _nodate`), because a time index
+  is not a covariate and its tiny within-window variance interacts with the `1e-6` constant in the model's separability formula.
+  Conclusions are reported only if they hold in both variants.
 
 ## Statistical plan
 * Mean ± SD over runs; 95% bootstrap CI (S3, shuffled: over runs; Elec2: moving-block bootstrap with 500-sample blocks over its own checkpoint series).
