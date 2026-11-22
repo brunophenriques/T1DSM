@@ -114,10 +114,10 @@ def figure(data, sfx=""):
         M = np.vstack(curves); x = c["runs"][0]["t"]
         with warnings.catch_warnings():
             warnings.simplefilter("ignore"); mean, sd = np.nanmean(M, 0), np.nanstd(M, 0)
-        ax.plot(x, mean, lw=1.3, ls="--" if lab == "S1" else "-", zorder=3 if lab == "S1" else 2,
-                label=f"{lab} (k={k}, {len(curves)} run{'s' if len(curves) > 1 else ''})")
+        (line,) = ax.plot(x, mean, lw=1.3, ls="--" if lab == "S1" else "-", zorder=3 if lab == "S1" else 2,
+                          label=f"{lab} (k={k}, {len(curves)} run{'s' if len(curves) > 1 else ''})")
         if len(curves) > 1:
-            ax.fill_between(x, mean - sd, mean + sd, alpha=0.18)
+            ax.fill_between(x, mean - sd, mean + sd, alpha=0.18, color=line.get_color())
         if cfg["stream"].get("drift_at"):
             ax.axvline(cfg["stream"]["drift_at"], color="red", ls="--", lw=0.8)
     ax.set_xlabel("samples"); ax.set_ylabel(f"top-k Jaccard, lag {PRIMARY_LAG}"); ax.set_ylim(-0.02, 1.05)
