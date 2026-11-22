@@ -1,0 +1,47 @@
+{
+  "name": "wf1_elec2_shuffled",
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+  ],
+  "model": {
+    "max_rules": 5,
+    "tau_merge": 0.62,
+    "safe_threshold": 0.07,
+    "min_firing_for_update": 0.05,
+    "drift_sensitivity": 0.35
+  },
+  "checkpoint_every": 50,
+  "acc_window": 200,
+  "outdir": "results_relevance",
+  "stream": {
+    "type": "river",
+    "name": "Elec2",
+    "n": 10000,
+    "scaling": "none",
+    "shuffle": true
+  },
+  "analysis": {
+    "lags_samples": [
+      50,
+      100,
+      150,
+      200,
+      500,
+      2000
+    ],
+    "topk": 3,
+    "recovery_precision": 1.0,
+    "recovery_consecutive": 3,
+    "warmup_flush": 200,
+    "acc_tol": 0.02
+  }
+}

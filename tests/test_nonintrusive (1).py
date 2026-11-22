@@ -5,7 +5,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from run_relevance import run_one
-from relevance.streams import relevance_drift_stream, expanding_minmax
+from relevance.streams import relevance_drift_stream, expanding_minmax, agrawal_drift_stream, agrawal_labels, AGRAWAL_FEATURES
 from relevance.metrics import tau_b, auc, topk_jaccard, first_sustained, topk_precision
 
 CFG = json.load(open(ROOT / "configs" / "mve.json"))
@@ -61,6 +61,30 @@ def test_matches_baseline_loop_if_available():
     assert np.array_equal(ref["y_pred"], ours["y_pred"])
     assert np.array_equal(ref["n_rules_time"], ours["n_rules"])
     print("RAN baseline comparison: identical predictions and rule counts")
+
+
+def test_agrawal_drift_truth_changes_at_drift():
+    st = agrawal_drift_stream(n=1000, drift_at=500, f_before=6, f_after=2, seed=0)
+    assert st.X.shape == (1000, 9) and st.truth.shape == (1000, 9)
+    assert 0.0 <= st.X.min() and st.X.max() <= 1.0
+    assert list(np.where(st.truth[499])[0]) == [0, 1, 8]      # function 6 reads salary, commission, loan
+    assert list(np.where(st.truth[500])[0]) == [2, 3]         # function 2 reads age, elevel
+
+
+def test_agrawal_labels_match_river_if_available():
+    try:
+        from river.datasets import synth
+    except Exception as e:
+        print("SKIP agrawal label check:", repr(e))
+        return
+    for f in range(10):
+        rows, ys = [], []
+        for i, (x, y) in enumerate(synth.Agrawal(classification_function=f, seed=7)):
+            if i >= 2000:
+                break
+            rows.append([x[k] for k in AGRAWAL_FEATURES]); ys.append(y)
+        assert np.array_equal(agrawal_labels(f, np.array(rows, dtype=float)), np.array(ys)), f"function {f}"
+    print("RAN agrawal label check: all 10 functions match river")
 
 
 def test_metrics_and_scaling():
