@@ -1,0 +1,63 @@
+{
+  "config_name": "s1_gauss_abrupt",
+  "config_file": "configs/protocol/s1_gauss_abrupt.json",
+  "variant": "open",
+  "seed": 7,
+  "model_params": {
+    "max_rules": null,
+    "tau_merge": 0.62,
+    "safe_threshold": 0.07,
+    "min_firing_for_update": 0.05,
+    "drift_sensitivity": 0.35
+  },
+  "stream": {
+    "family": "gauss_shift",
+    "n": 20000,
+    "d": 10,
+    "drift_at": 10000,
+    "drift_width": 0,
+    "rel_before": [
+      0,
+      1,
+      2
+    ],
+    "rel_after": [
+      5,
+      6,
+      7
+    ],
+    "delta": 0.3,
+    "sd": 0.12,
+    "label_noise": 0.0,
+    "seed": 7
+  },
+  "n": 20000,
+  "d": 10,
+  "drift_points": [
+    10000
+  ],
+  "drift_widths": [
+    0
+  ],
+  "rule_events_final": {
+    "ev_created": 89,
+    "ev_pruned": 0,
+    "ev_newborn_pruned": 0,
+    "ev_merged": 0
+  },
+  "started_utc": "2026-11-21T23:04:35+00:00",
+  "proc_time_s": 103.85186400008388,
+  "log_time_s": 1.0280228999035899,
+  "git": {
+    "commit": "74b7549b06b70aedb14b730e0d85f99e3ca2abeb",
+    "branch": "bruno/wf2-drift-validity",
+    "uncommitted_changes": false
+  },
+  "versions": {
+    "python": "3.11.9",
+    "numpy": "2.2.6",
+    "scipy": "1.17.1",
+    "matplotlib": "3.11.2",
+    "river": "0.27.0"
+  }
+}
