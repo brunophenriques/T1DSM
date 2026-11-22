@@ -1,0 +1,13 @@
+stream,variant,metric,mean,std,ci_low,ci_high
+s1_gauss_abrupt,ref,recovery_censored/G/drift1,145.0,15.0,135.0,150.0
+s1_gauss_abrupt,ref,recovery_censored/A/drift1,10000.0,0.0,10000.0,10000.0
+s1_gauss_abrupt,ref,acc/recovery_censored/drift1,845.0,799.5154782741857,460.0,1420.0
+s1_gauss_abrupt,open,recovery_censored/G/drift1,145.0,15.0,135.0,150.0
+s1_gauss_abrupt,open,recovery_censored/A/drift1,10000.0,0.0,10000.0,10000.0
+s1_gauss_abrupt,open,acc/recovery_censored/drift1,9790.0,366.6060555964672,9540.0,10000.0
+s2_gauss_gradual,ref,recovery_censored/G/drift1,50.0,0.0,50.0,50.0
+s2_gauss_gradual,ref,recovery_censored/A/drift1,9500.0,0.0,9500.0,9500.0
+s2_gauss_gradual,ref,acc/recovery_censored/drift1,1215.0,841.1450528892149,715.0,1745.0
+s2_gauss_gradual,open,recovery_censored/G/drift1,50.0,0.0,50.0,50.0
+s2_gauss_gradual,open,recovery_censored/A/drift1,9500.0,0.0,9500.0,9500.0
+s2_gauss_gradual,open,acc/recovery_censored/drift1,8955.0,1006.8391132648751,8255.0,9500.0
