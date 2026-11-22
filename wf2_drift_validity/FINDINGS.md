@@ -222,8 +222,64 @@ because R1 depends on the stream rather than the rule base.
 
 ## 8. Implementation Risks and Mitigation
 
-Pending.
+### Risk 1 — Misleading recovery measurements
+
+A temporary improvement in feature ranking or accuracy
+may be incorrectly interpreted as successful recovery.
+Unrecovered runs may also bias recovery-time estimates
+if excluded.
+
+Mitigation:
+- Require three consecutive qualifying checkpoints.
+- Record right-censored observations.
+- Report recovery rates alongside recovery times.
+- Validate the implementation using controlled
+  step-curve unit tests.
+
+### Risk 2 — Confounding relevance and predictive adaptation
+
+Fast global relevance recovery may be incorrectly
+interpreted as successful adaptation of the classifier.
+
+Mitigation:
+- Evaluate R1, R4 and predictive recovery separately.
+- Compare ref and open configurations.
+- Monitor rule-base evolution.
+- Restrict predictive recovery claims to predictive
+  streams.
+- Include S4 as a negative control.
 
 ## 9. Final Conclusions
 
 Pending.
+
+## 10. Table 1 — SQ2
+
+| Research question | Primary metric | Result | 95% CI | Recovery rate |
+|---|---|---|---|---|
+| SQ2 — Drift sensitivity | R1 ranking recovery on S1 | 145 ± 15 samples | [135, 150] | 10/10 |
+
+
+## 11. Final Interpretation
+
+Global feature relevance recovered after abrupt drift
+in 145 ± 15 samples, supporting the predicted recovery
+interval of 100–250 samples.
+
+Under gradual drift, the correct feature ranking was
+achieved at the first checkpoint after the transition.
+
+Effective rule weights failed to recover on both S1
+and S2 across all tested seeds.
+
+Predictive recovery in the open configuration was
+substantially slower than global relevance recovery
+(Holm-adjusted p = 0.0137).
+
+The S4 negative control preserved the correct global
+feature ranking despite the change in the
+classification threshold.
+
+These findings demonstrate that relevance adaptation,
+rule-weight adaptation and predictive recovery are
+distinct processes. 
