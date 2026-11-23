@@ -1,0 +1,97 @@
+{
+  "name": "s1_window_study",
+  "note": "H2, second part: does R1's ranking recovery on S1 grow with the window size? Same stream and analysis as configs/protocol/s1_gauss_abrupt.json; the variants differ only in the size of the separability buffer behind R1 (buffer_size_separability, 200 in the baseline). R1 depends only on the data and the window, not on the rule base, so the ref settings are used. Only the recovery metrics are interpreted; stability/validity here use warmup_flush = 200 for every window.",
+  "role": "relevance-only",
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+  ],
+  "stream": {
+    "type": "gauss_shift",
+    "delta": 0.3,
+    "sd": 0.12,
+    "n": 20000,
+    "d": 10,
+    "rel_before": [
+      0,
+      1,
+      2
+    ],
+    "rel_after": [
+      5,
+      6,
+      7
+    ],
+    "drift_at": 10000,
+    "drift_width": 0
+  },
+  "variants": {
+    "w50": {
+      "max_rules": 5,
+      "tau_merge": 0.62,
+      "safe_threshold": 0.07,
+      "min_firing_for_update": 0.05,
+      "drift_sensitivity": 0.35,
+      "buffer_size_separability": 50
+    },
+    "w100": {
+      "max_rules": 5,
+      "tau_merge": 0.62,
+      "safe_threshold": 0.07,
+      "min_firing_for_update": 0.05,
+      "drift_sensitivity": 0.35,
+      "buffer_size_separability": 100
+    },
+    "w200": {
+      "max_rules": 5,
+      "tau_merge": 0.62,
+      "safe_threshold": 0.07,
+      "min_firing_for_update": 0.05,
+      "drift_sensitivity": 0.35,
+      "buffer_size_separability": 200
+    },
+    "w500": {
+      "max_rules": 5,
+      "tau_merge": 0.62,
+      "safe_threshold": 0.07,
+      "min_firing_for_update": 0.05,
+      "drift_sensitivity": 0.35,
+      "buffer_size_separability": 500
+    },
+    "w1000": {
+      "max_rules": 5,
+      "tau_merge": 0.62,
+      "safe_threshold": 0.07,
+      "min_firing_for_update": 0.05,
+      "drift_sensitivity": 0.35,
+      "buffer_size_separability": 1000
+    }
+  },
+  "checkpoint_every": 50,
+  "acc_window": 500,
+  "analysis": {
+    "lags_samples": [
+      50,
+      200,
+      500,
+      2000
+    ],
+    "topk": 3,
+    "recovery_precision": 1.0,
+    "recovery_consecutive": 3,
+    "warmup_flush": 200,
+    "acc_tol": 0.02,
+    "acc_pre_samples": 1000,
+    "acc_consecutive": 3,
+    "acc_trough_samples": 1000
+  },
+  "outdir": "results_wf2"
+}
