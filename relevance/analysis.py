@@ -30,6 +30,8 @@ def analyze(arr: dict, truth, drift_points, a: dict, every: int, drift_widths=No
         if truth is None:
             raise ValueError('topk="truth" needs a ground-truth mask')
         kk = truth[t - 1].sum(axis=1).astype(int)
+        if (kk == 0).any():
+            raise ValueError('topk="truth" needs at least one relevant feature at every checkpoint')
     else:
         kk = np.full(T, int(a["topk"]))
     dps = list(drift_points)

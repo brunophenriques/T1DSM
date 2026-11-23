@@ -69,7 +69,8 @@ def reanalyze_seed(seed_dir: Path) -> tuple:
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("roots", nargs="*", default=[str(ROOT / "results_wf2")])
-    ap.add_argument("--note", default="results_wf2/reanalysis.json", help="where to write the provenance note")
+    ap.add_argument("--note", help="where to write the provenance note (default: reanalysis.json in the first "
+                                   "root, so re-analysing a subset never overwrites another record)")
     args = ap.parse_args()
     code = _git_info()                    # before any metrics.json is rewritten
     n_runs, added_all = 0, set()
@@ -95,7 +96,7 @@ def main():
                       "only the keys listed here were added ('removed:' = the first R5-vs-R1 agreement, which broke ties by "
                       "feature index, replaced by the tie-aware agree/P_vs_G/topk_overlap). checkpoints.npz, "
                       "permutation.npz and meta.json are untouched.")
-    out = ROOT / args.note
+    out = ROOT / args.note if args.note else Path(args.roots[0]).resolve() / "reanalysis.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     json.dump(note, open(out, "w"), indent=2)
     print(f"{n_runs} runs; added keys: {sorted(added_all)}")

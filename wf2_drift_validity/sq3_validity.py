@@ -83,15 +83,20 @@ def s6_copy_rows():
     if not exists(path):
         return rows
     for s in SEEDS:
+        meta = json.load(open(path / f"seed_{s}" / "meta.json"))
+        cfg = json.load(open(ROOT / meta["config_file"]))
+        dp, flush, k = meta["drift_points"][0], cfg["analysis"]["warmup_flush"], int(cfg["analysis"]["topk"])
+        col, src = meta["stream"]["copy"]["column"], meta["stream"]["copy"]["source"]
         with np.load(path / f"seed_{s}" / "checkpoints.npz") as z:
             t, G = z["t"], z["G"]
-        for seg, mask in (("first half", (t >= 200) & (t <= 10000)), ("second half", t >= 10200)):
+        # clean checkpoints, as in relevance.analysis: the 200-sample buffer holds one concept only
+        for seg, mask in (("first half", (t >= flush) & (t <= dp)), ("second half", t >= dp + flush)):
             Gs = G[mask]
-            in_top3 = np.array([10 in topk_idx(g, 3) for g in Gs])
-            rank = np.array([int(np.where(np.argsort(-g, kind="stable") == 10)[0][0]) + 1 for g in Gs])
-            rows.append(dict(seed=s, segment=seg, copy_in_top3_share=float(in_top3.mean()),
-                             copy_mean_rank=float(rank.mean()), copy_weight_mean=float(Gs[:, 10].mean()),
-                             x0_weight_mean=float(Gs[:, 0].mean())))
+            in_top = np.array([col in topk_idx(g, k) for g in Gs])
+            rank = np.array([int(np.where(np.argsort(-g, kind="stable") == col)[0][0]) + 1 for g in Gs])
+            rows.append(dict(seed=s, segment=seg, copy_in_top3_share=float(in_top.mean()),
+                             copy_mean_rank=float(rank.mean()), copy_weight_mean=float(Gs[:, col].mean()),
+                             x0_weight_mean=float(Gs[:, src].mean())))
     return rows
 
 
