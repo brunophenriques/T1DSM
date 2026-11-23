@@ -1,0 +1,3 @@
+family,comparison,meaning,n_pairs,n_nonzero,wilcoxon_p,rank_biserial,sign_test_p,holm_p,holm_family_size
+SQ3 (secondary),"S6 vs S1: R1 top-3 precision, first half (same streams plus the copy)",negative = the copy pushes a relevant feature out of the top 3,10,10,0.001953125,-1.0,0.001953125,0.00390625,2
+SQ3 (secondary),S1 open: R5 vs R1 top-3 precision (mean of both halves),negative = permutation importance finds the relevant features less often than R1,10,10,0.001953125,-1.0,0.001953125,0.00390625,2
