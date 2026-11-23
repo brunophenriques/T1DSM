@@ -1,0 +1,410 @@
+{
+  "config": {
+    "name": "s6_gauss_copy",
+    "note": "S6: S1 plus x10 = clip(x0 + N(0, 0.02), 0, 1), a non-causal copy of x0 that is never relevant. The original ten columns and the labels are bit-identical to S1 (the copy has its own random generator). Question: does the per-feature statistic mark the copy as relevant?",
+    "role": "predictive",
+    "seeds": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9
+    ],
+    "stream": {
+      "type": "gauss_shift",
+      "delta": 0.3,
+      "sd": 0.12,
+      "n": 20000,
+      "d": 10,
+      "rel_before": [
+        0,
+        1,
+        2
+      ],
+      "rel_after": [
+        5,
+        6,
+        7
+      ],
+      "drift_at": 10000,
+      "drift_width": 0,
+      "copy": {
+        "source": 0,
+        "noise_sd": 0.02
+      }
+    },
+    "variants": {
+      "ref": {
+        "max_rules": 5,
+        "tau_merge": 0.62,
+        "safe_threshold": 0.07,
+        "min_firing_for_update": 0.05,
+        "drift_sensitivity": 0.35
+      },
+      "open": {
+        "max_rules": null,
+        "tau_merge": 0.62,
+        "safe_threshold": 0.07,
+        "min_firing_for_update": 0.05,
+        "drift_sensitivity": 0.35
+      }
+    },
+    "checkpoint_every": 50,
+    "acc_window": 500,
+    "analysis": {
+      "lags_samples": [
+        50,
+        200,
+        500,
+        2000
+      ],
+      "topk": 3,
+      "recovery_precision": 1.0,
+      "recovery_consecutive": 3,
+      "warmup_flush": 200,
+      "acc_tol": 0.02,
+      "acc_pre_samples": 1000,
+      "acc_consecutive": 3,
+      "acc_trough_samples": 1000
+    },
+    "outdir": "results_wf2"
+  },
+  "variant": "ref",
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+  ],
+  "summary": {
+    "acc/drop/drift1": {
+      "mean": 0.03348999999999999,
+      "std": 0.01368323426679523,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "acc/recovered/drift1": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "acc/recovery/drift1": {
+      "mean": 655.0,
+      "std": 319.72644557496335,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "acc/recovery_censored/drift1": {
+      "mean": 655.0,
+      "std": 319.72644557496335,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "acc_final": {
+      "mean": 0.5038150000000001,
+      "std": 0.004644784709757821,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "f1_final": {
+      "mean": 0.501391908310233,
+      "std": 0.00411009077325978,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "frac_constant/A": {
+      "mean": 0.50125,
+      "std": 0.49874999999999997,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "frac_constant/G": {
+      "mean": 0.0,
+      "std": 0.0,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "log_time_s": {
+      "mean": 0.13200576995641314,
+      "std": 0.001645140020705242,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "n_checkpoints": {
+      "mean": 400.0,
+      "std": 0.0,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "proc_time_s": {
+      "mean": 8.093276100043658,
+      "std": 0.13061516995806952,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "recovered/A/drift1": {
+      "mean": 0.0,
+      "std": 0.0,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "recovered/G/drift1": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "recovery/A/drift1": {
+      "mean": null,
+      "std": null,
+      "n_valid": 0,
+      "n_seeds": 10
+    },
+    "recovery/G/drift1": {
+      "mean": 145.0,
+      "std": 15.0,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "recovery_censored/A/drift1": {
+      "mean": 10000.0,
+      "std": 0.0,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "recovery_censored/G/drift1": {
+      "mean": 145.0,
+      "std": 15.0,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "recovery_from_dp/A/drift1": {
+      "mean": null,
+      "std": null,
+      "n_valid": 0,
+      "n_seeds": 10
+    },
+    "recovery_from_dp/G/drift1": {
+      "mean": 145.0,
+      "std": 15.0,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "recovery_from_dp_censored/A/drift1": {
+      "mean": 10000.0,
+      "std": 0.0,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "recovery_from_dp_censored/G/drift1": {
+      "mean": 145.0,
+      "std": 15.0,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "rules_final": {
+      "mean": 5.0,
+      "std": 0.0,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "stab/A/jaccard/lag200": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 5,
+      "n_seeds": 10
+    },
+    "stab/A/jaccard/lag2000": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 5,
+      "n_seeds": 10
+    },
+    "stab/A/jaccard/lag50": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 5,
+      "n_seeds": 10
+    },
+    "stab/A/jaccard/lag500": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 5,
+      "n_seeds": 10
+    },
+    "stab/A/tau_b/lag200": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 5,
+      "n_seeds": 10
+    },
+    "stab/A/tau_b/lag2000": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 5,
+      "n_seeds": 10
+    },
+    "stab/A/tau_b/lag50": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 5,
+      "n_seeds": 10
+    },
+    "stab/A/tau_b/lag500": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 5,
+      "n_seeds": 10
+    },
+    "stab/G/jaccard/lag200": {
+      "mean": 0.8234455958549223,
+      "std": 0.007794656157165989,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "stab/G/jaccard/lag2000": {
+      "mean": 0.8253184713375796,
+      "std": 0.011056277284611423,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "stab/G/jaccard/lag50": {
+      "mean": 0.9105867346938776,
+      "std": 0.008771393493343974,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "stab/G/jaccard/lag500": {
+      "mean": 0.8208556149732621,
+      "std": 0.007726301217540032,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "stab/G/tau_b/lag200": {
+      "mean": 0.47788977861516724,
+      "std": 0.012657612782780804,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "stab/G/tau_b/lag2000": {
+      "mean": 0.47652576722640416,
+      "std": 0.0047644162214483185,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "stab/G/tau_b/lag50": {
+      "mean": 0.6486827458256028,
+      "std": 0.005433775913078219,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "stab/G/tau_b/lag500": {
+      "mean": 0.4795819154107924,
+      "std": 0.01055274840940224,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "struct/created_total": {
+      "mean": 12.6,
+      "std": 5.695612346359257,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "struct/removed_total": {
+      "mean": 7.6,
+      "std": 5.695612346359257,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "struct/rules_mean": {
+      "mean": 5.0,
+      "std": 0.0,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "valid/A/auc/seg0": {
+      "mean": 0.7208333333333334,
+      "std": 0.22208763285394056,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "valid/A/auc/seg1": {
+      "mean": 0.36666666666666664,
+      "std": 0.14766704288891125,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "valid/A/prec_at_k/seg0": {
+      "mean": 0.4696969696969697,
+      "std": 0.1969696969696971,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "valid/A/prec_at_k/seg1": {
+      "mean": 0.13636363636363633,
+      "std": 0.13636363636363633,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "valid/G/auc/seg0": {
+      "mean": 0.9557529610829103,
+      "std": 0.00486353257546464,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "valid/G/auc/seg1": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "valid/G/prec_at_k/seg0": {
+      "mean": 0.7810490693739425,
+      "std": 0.018981121708805622,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "valid/G/prec_at_k/seg1": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "var/A/seg0": {
+      "mean": 3.386954694949422e-05,
+      "std": 8.2135645597712e-05,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "var/A/seg1": {
+      "mean": 6.259185041762505e-06,
+      "std": 1.1999074258234715e-05,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "var/G/seg0": {
+      "mean": 0.0031993947887598885,
+      "std": 0.00031813150652846303,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "var/G/seg1": {
+      "mean": 0.0023368170336030987,
+      "std": 0.00016873427660663438,
+      "n_valid": 10,
+      "n_seeds": 10
+    }
+  }
+}

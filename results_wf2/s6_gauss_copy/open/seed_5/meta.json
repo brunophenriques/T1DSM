@@ -1,0 +1,68 @@
+{
+  "config_name": "s6_gauss_copy",
+  "config_file": "configs/protocol/s6_gauss_copy.json",
+  "variant": "open",
+  "seed": 5,
+  "model_params": {
+    "max_rules": null,
+    "tau_merge": 0.62,
+    "safe_threshold": 0.07,
+    "min_firing_for_update": 0.05,
+    "drift_sensitivity": 0.35
+  },
+  "stream": {
+    "family": "gauss_shift",
+    "n": 20000,
+    "d": 11,
+    "drift_at": 10000,
+    "drift_width": 0,
+    "rel_before": [
+      0,
+      1,
+      2
+    ],
+    "rel_after": [
+      5,
+      6,
+      7
+    ],
+    "delta": 0.3,
+    "sd": 0.12,
+    "label_noise": 0.0,
+    "seed": 5,
+    "copy": {
+      "column": 10,
+      "source": 0,
+      "noise_sd": 0.02
+    }
+  },
+  "n": 20000,
+  "d": 11,
+  "drift_points": [
+    10000
+  ],
+  "drift_widths": [
+    0
+  ],
+  "rule_events_final": {
+    "ev_created": 96,
+    "ev_pruned": 0,
+    "ev_newborn_pruned": 0,
+    "ev_merged": 0
+  },
+  "started_utc": "2026-11-23T18:54:21+00:00",
+  "proc_time_s": 60.855973599958816,
+  "log_time_s": 0.39739250004095084,
+  "git": {
+    "commit": "2e1c92aa6eb1bc029261bb101e17c44ad925ccfe",
+    "branch": "feature/wf2-sq3-validity",
+    "uncommitted_changes": false
+  },
+  "versions": {
+    "python": "3.12.10",
+    "numpy": "2.4.2",
+    "scipy": "1.17.1",
+    "matplotlib": "3.10.7",
+    "river": "0.27.0"
+  }
+}
