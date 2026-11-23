@@ -51,6 +51,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("roots", nargs="*", default=[str(ROOT / "results_wf2")])
     args = ap.parse_args()
+    code = _git_info()                    # before any metrics.json is rewritten
     n_runs, added_all = 0, set()
     for root in (Path(r).resolve() for r in args.roots):
         for summary in sorted(root.rglob("summary.json")):
@@ -68,7 +69,8 @@ def main():
             json.dump(old, open(summary, "w"), indent=2)
             print(f"{vdir.relative_to(ROOT)}: {len(seed_dirs)} runs re-analysed")
     note = dict(date_utc=datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
-                analysis_code=_git_info(), runs=n_runs, added_keys=sorted(added_all),
+                analysis_code=code, roots=[str(Path(r)) for r in args.roots], runs=n_runs,
+                added_keys=sorted(added_all),
                 check="every metric already in metrics.json was recomputed and is identical; "
                       "only the keys listed here were added. checkpoints.npz and meta.json are untouched.")
     out = ROOT / "results_wf2" / "reanalysis.json"
