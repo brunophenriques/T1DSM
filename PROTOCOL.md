@@ -183,6 +183,10 @@ Ablations are wrappers around the unmodified model. The baseline files are never
   used only as an overlay in descriptive plots. No recovery claims on Elec2.
 - **Ranking recovery:** first checkpoint after the drift (or transition end) where top-k precision vs the
   new truth = 1 for **3 checkpoints in a row**.
+  - Timed from the transition end, a gradual drift has a floor of one checkpoint (50 samples) and cannot
+    show a ranking that re-oriented during the transition. Abrupt and gradual drifts are therefore
+    compared with `recovery_from_dp/*`: the same rule, timed from the drift point (the transition
+    midpoint). For an abrupt drift the two are identical. (§14, 23 Nov.)
 - **Accuracy recovery** (predictive streams only):
   - Pre-drift level = mean 500-window accuracy over the last 1,000 samples before the drift (or
     transition start).
@@ -240,7 +244,8 @@ To be stated in the report. These results are **exploratory**; confirmatory resu
 
 | Date | Section | Change | Reason | Approved by |
 |---|---|---|---|---|
-| | | | | |
+| 23 Nov (pre-freeze) | §10 | Added `recovery_from_dp/*` (recovery timed from the drift point) for comparing abrupt and gradual drift; the protocol metric is still reported. | On S2 the protocol metric was 50 in every seed: a one-checkpoint floor, because R1 re-oriented before the transition ended. Found in the PR #5 review. | pending |
+| 23 Nov (pre-freeze) | §13, §15 | Ran the window-size part of H2 on S1 (`configs/wf2/s1_window_study.json`, windows 50–1,000, `ref` settings, seeds 0–9). | H2's second part had only been run on the uniform stream (exploratory). | pending |
 
 ## 15. Workflows, priorities and report
 

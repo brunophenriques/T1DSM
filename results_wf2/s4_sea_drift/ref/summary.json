@@ -176,6 +176,30 @@
       "n_valid": 10,
       "n_seeds": 10
     },
+    "recovery_from_dp/A/drift1": {
+      "mean": 50.0,
+      "std": 0.0,
+      "n_valid": 3,
+      "n_seeds": 10
+    },
+    "recovery_from_dp/G/drift1": {
+      "mean": 50.0,
+      "std": 0.0,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "recovery_from_dp_censored/A/drift1": {
+      "mean": 7015.0,
+      "std": 4559.662816481061,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "recovery_from_dp_censored/G/drift1": {
+      "mean": 50.0,
+      "std": 0.0,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
     "rules_final": {
       "mean": 5.0,
       "std": 0.0,

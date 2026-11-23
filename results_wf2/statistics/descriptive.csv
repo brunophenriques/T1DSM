@@ -1,13 +1,29 @@
-stream,variant,metric,mean,std,ci_low,ci_high
-s1_gauss_abrupt,ref,recovery_censored/G/drift1,145.0,15.0,135.0,150.0
-s1_gauss_abrupt,ref,recovery_censored/A/drift1,10000.0,0.0,10000.0,10000.0
-s1_gauss_abrupt,ref,acc/recovery_censored/drift1,845.0,799.5154782741857,460.0,1420.0
-s1_gauss_abrupt,open,recovery_censored/G/drift1,145.0,15.0,135.0,150.0
-s1_gauss_abrupt,open,recovery_censored/A/drift1,10000.0,0.0,10000.0,10000.0
-s1_gauss_abrupt,open,acc/recovery_censored/drift1,9790.0,366.6060555964672,9540.0,10000.0
-s2_gauss_gradual,ref,recovery_censored/G/drift1,50.0,0.0,50.0,50.0
-s2_gauss_gradual,ref,recovery_censored/A/drift1,9500.0,0.0,9500.0,9500.0
-s2_gauss_gradual,ref,acc/recovery_censored/drift1,1215.0,841.1450528892149,715.0,1745.0
-s2_gauss_gradual,open,recovery_censored/G/drift1,50.0,0.0,50.0,50.0
-s2_gauss_gradual,open,recovery_censored/A/drift1,9500.0,0.0,9500.0,9500.0
-s2_gauss_gradual,open,acc/recovery_censored/drift1,8955.0,1006.8391132648751,8255.0,9500.0
+stream,variant,label,metric,n,mean,sd,median,ci_low,ci_high,recovered,censored_pct,at_floor
+s1_gauss_abrupt,ref,R1 ranking recovery (protocol: from transition end),recovery_censored/G/drift1,10,145.0,15.811388300841896,150.0,135.0,150.0,10,0.0,0
+s1_gauss_abrupt,open,R1 ranking recovery (protocol: from transition end),recovery_censored/G/drift1,10,145.0,15.811388300841896,150.0,135.0,150.0,10,0.0,0
+s1_gauss_abrupt,ref,R1 ranking recovery from the drift point,recovery_from_dp_censored/G/drift1,10,145.0,15.811388300841896,150.0,135.0,150.0,10,0.0,
+s1_gauss_abrupt,open,R1 ranking recovery from the drift point,recovery_from_dp_censored/G/drift1,10,145.0,15.811388300841896,150.0,135.0,150.0,10,0.0,
+s1_gauss_abrupt,ref,R4 ranking recovery (protocol),recovery_censored/A/drift1,10,10000.0,0.0,10000.0,10000.0,10000.0,0,100.0,
+s1_gauss_abrupt,open,R4 ranking recovery (protocol),recovery_censored/A/drift1,10,10000.0,0.0,10000.0,10000.0,10000.0,0,100.0,
+s1_gauss_abrupt,open,Accuracy recovery (open only),acc/recovery_censored/drift1,10,9790.0,386.4367132317184,10000.0,9540.0,10000.0,3,70.0,
+s1_gauss_abrupt,open,Accuracy drop,acc/drop/drift1,10,0.1274,0.024616706161105752,0.12795,0.11334975000000004,0.14237025000000003,,,
+s1_gauss_abrupt,ref,Final accuracy,acc_final,10,0.50433,0.006031132195164974,0.503975,0.501015,0.5080399999999999,,,
+s1_gauss_abrupt,open,Final accuracy,acc_final,10,0.5818700000000001,0.008444794583384228,0.581325,0.576979625,0.5868899999999999,,,
+s1_gauss_abrupt,ref,Final macro-F1,f1_final,10,0.5022071091538882,0.0043433661554405185,0.5024229415946988,0.49972082666133527,0.5047643474883803,,,
+s1_gauss_abrupt,open,Final macro-F1,f1_final,10,0.5808548912331208,0.009033966856182728,0.5808471115431737,0.5757159909088074,0.5862911160536204,,,
+s1_gauss_abrupt,ref,Final rule count,rules_final,10,5.0,0.0,5.0,5.0,5.0,,,
+s1_gauss_abrupt,open,Final rule count,rules_final,10,97.7,8.000694414306244,97.0,93.0,102.5,,,
+s2_gauss_gradual,ref,R1 ranking recovery (protocol: from transition end),recovery_censored/G/drift1,10,50.0,0.0,50.0,50.0,50.0,10,0.0,10
+s2_gauss_gradual,open,R1 ranking recovery (protocol: from transition end),recovery_censored/G/drift1,10,50.0,0.0,50.0,50.0,50.0,10,0.0,10
+s2_gauss_gradual,ref,R1 ranking recovery from the drift point,recovery_from_dp_censored/G/drift1,10,190.0,31.622776601683793,200.0,170.0,210.0,10,0.0,
+s2_gauss_gradual,open,R1 ranking recovery from the drift point,recovery_from_dp_censored/G/drift1,10,190.0,31.622776601683793,200.0,170.0,210.0,10,0.0,
+s2_gauss_gradual,ref,R4 ranking recovery (protocol),recovery_censored/A/drift1,10,9500.0,0.0,9500.0,9500.0,9500.0,0,100.0,
+s2_gauss_gradual,open,R4 ranking recovery (protocol),recovery_censored/A/drift1,10,9500.0,0.0,9500.0,9500.0,9500.0,0,100.0,
+s2_gauss_gradual,open,Accuracy recovery (open only),acc/recovery_censored/drift1,10,8955.0,1061.3016117537516,9500.0,8255.0,9500.0,3,70.0,
+s2_gauss_gradual,open,Accuracy drop,acc/drop/drift1,10,0.12536999999999998,0.03186537828636805,0.12359999999999999,0.10703924999999999,0.14428024999999997,,,
+s2_gauss_gradual,ref,Final accuracy,acc_final,10,0.50437,0.006061087177873115,0.504075,0.5010098749999999,0.5080749999999999,,,
+s2_gauss_gradual,open,Final accuracy,acc_final,10,0.578095,0.007679064251442201,0.5775250000000001,0.5739797499999999,0.5828901249999999,,,
+s2_gauss_gradual,ref,Final macro-F1,f1_final,10,0.502282141245421,0.004465905513360825,0.5025641888430066,0.4997287035386064,0.5049176219321744,,,
+s2_gauss_gradual,open,Final macro-F1,f1_final,10,0.5770555151703516,0.00791955342938753,0.5753923016048029,0.5728707020643719,0.5820736188271197,,,
+s2_gauss_gradual,ref,Final rule count,rules_final,10,5.0,0.0,5.0,5.0,5.0,,,
+s2_gauss_gradual,open,Final rule count,rules_final,10,93.4,13.15885844424035,89.5,86.1,101.3,,,
