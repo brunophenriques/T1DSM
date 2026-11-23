@@ -145,11 +145,15 @@ def test_analyze_permutation_clean_windows_and_k():
     m = analyze_permutation(perm, truth, [1000], [0], G_t, G, {"topk": 2})
     assert m["perm/n_clean/seg0"] == 2 and m["perm/n_clean/seg1"] == 2     # 1100 is not clean (window touches drift)
     assert m["valid/P/prec_at_k/seg0"] == 1.0 and m["valid/P/prec_at_k/seg1"] == 1.0
-    assert m["agree/P_vs_G/jaccard/seg1"] == 1.0
-    # A constant R5 (model ignores its input): precision is chance, agreement is undefined, not 1.0
+    assert m["agree/P_vs_G/topk_overlap/seg1"] == 1.0
+    # A constant R5 (model ignores its input): precision and agreement are at chance (k/d), not 1.0
     flat = dict(perm, P=[[0.0] * 4] * 5)
     m = analyze_permutation(flat, truth, [1000], [0], G_t, G, {"topk": 2})
-    assert m["valid/P/prec_at_k/seg0"] == 0.5 and np.isnan(m["agree/P_vs_G/jaccard/seg0"])
+    assert m["valid/P/prec_at_k/seg0"] == 0.5 and m["agree/P_vs_G/topk_overlap/seg0"] == 0.5
+    # Partial ties: one clear feature, the rest tied at 0. Only feature 0 is surely in R5's top 2.
+    tied = dict(perm, P=[[0.3, 0, 0, 0]] * 5)
+    m = analyze_permutation(tied, truth, [1000], [0], G_t, G, {"topk": 2})
+    assert np.isclose(m["agree/P_vs_G/topk_overlap/seg0"], (1 + 1 / 3) / 2)
 
 
 if __name__ == "__main__":

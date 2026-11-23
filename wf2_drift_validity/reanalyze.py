@@ -50,11 +50,17 @@ def reanalyze_seed(seed_dir: Path) -> tuple:
             perm = dict(t=z["t"], P=z["P"], base_acc=z["base_acc"], window=meta["perm_importance"]["window"])
         pm = analyze_permutation(perm, st.truth, st.drift_points, st.drift_widths, arr["t"], arr["G"],
                                  cfg["analysis"])
-        # Only the R5-vs-R1 agreement may change (it is now undefined when R5 is constant).
+        # Only the R5-vs-R1 agreement may change: the first version (agree/P_vs_G/jaccard) broke ties by
+        # feature index; it is replaced by the tie-aware agree/P_vs_G/topk_overlap.
         bad = [k for k in pm if k in old and not k.startswith("agree/P_vs_G/") and not _same(old[k], pm[k])]
         if bad:
             raise SystemExit(f"{seed_dir}: R5 metrics would change {bad}")
         added += [f"updated:{k}" for k in pm if k in old and not _same(old[k], pm[k])]
+        added += [k for k in pm if k not in old]
+        dropped = [k for k in merged if k.startswith("agree/P_vs_G/jaccard/")]
+        added += [f"removed:{k}" for k in dropped]
+        for k in dropped:
+            merged.pop(k)
         merged.update(pm)
     json.dump(merged, open(seed_dir / "metrics.json", "w"), indent=2)
     return merged, added, cfg
@@ -86,8 +92,9 @@ def main():
                 analysis_code=code, roots=[str(Path(r)) for r in args.roots], runs=n_runs,
                 added_keys=sorted(added_all),
                 check="every metric already in metrics.json was recomputed and is identical; "
-                      "only the keys listed here were added ('updated:' = R5-vs-R1 agreement recomputed, now NaN "
-                      "when R5 is constant). checkpoints.npz, permutation.npz and meta.json are untouched.")
+                      "only the keys listed here were added ('removed:' = the first R5-vs-R1 agreement, which broke ties by "
+                      "feature index, replaced by the tie-aware agree/P_vs_G/topk_overlap). checkpoints.npz, "
+                      "permutation.npz and meta.json are untouched.")
     out = ROOT / args.note
     out.parent.mkdir(parents=True, exist_ok=True)
     json.dump(note, open(out, "w"), indent=2)

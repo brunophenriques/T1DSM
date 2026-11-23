@@ -6,7 +6,7 @@ with its own random generator, so the prequential run is identical with or witho
 """
 from __future__ import annotations
 import numpy as np
-from .metrics import topk_precision, auc, topk_jaccard, is_constant
+from .metrics import topk_precision, auc, topk_idx
 
 DEFAULT = {"every": 500, "window": 200, "repeats": 5}
 
@@ -51,16 +51,21 @@ def analyze_permutation(perm: dict, truth, drift_points, drift_widths, G_t, G, a
     prec = np.array([topk_precision(P[i], tr[i], kk[i]) for i in range(len(t))])
     auc_ = np.array([auc(P[i], tr[i]) for i in range(len(t))])
     gi = {int(v): i for i, v in enumerate(G_t)}
-    # Jaccard of the top-k sets is undefined when R5 is constant (e.g. a model that ignores its input):
-    # a plain top-k would then pick the lowest feature indices and fake an agreement.
-    jac = np.array([topk_jaccard(P[i], G[gi[int(t[i])]], kk[i])
-                    if int(t[i]) in gi and not is_constant(P[i]) else np.nan for i in range(len(t))])
+    # Agreement with R1: the share of R5's top k that is also in R1's top k. R5 often has ties (permuting
+    # a feature changes no prediction -> importance exactly 0), and a plain top-k would then pick the
+    # lowest feature indices and fake an agreement. So the share is tie-aware, like topk_precision:
+    # ties at the k-th place count at their expected value (a constant R5 scores chance, k/d).
+    def overlap(i):
+        ref = np.zeros(P.shape[1])
+        ref[topk_idx(G[gi[int(t[i])]], kk[i])] = 1.0
+        return topk_precision(P[i], ref, kk[i])
+    agree = np.array([overlap(i) if int(t[i]) in gi else np.nan for i in range(len(t))])
     for s in range(len(starts)):
         m = clean & (seg == s)
         nm = lambda x: float(np.nanmean(x[m])) if m.any() and not np.all(np.isnan(x[m])) else float("nan")
         out[f"valid/P/prec_at_k/seg{s}"] = nm(prec)
         out[f"valid/P/auc/seg{s}"] = nm(auc_)
-        out[f"agree/P_vs_G/jaccard/seg{s}"] = nm(jac)
+        out[f"agree/P_vs_G/topk_overlap/seg{s}"] = nm(agree)
         out[f"perm/base_acc/seg{s}"] = nm(np.asarray(perm["base_acc"], dtype=float))
         out[f"perm/n_clean/seg{s}"] = int(m.sum())
     return out
