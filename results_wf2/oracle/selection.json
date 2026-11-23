@@ -1,0 +1,109 @@
+{
+  "detected": [
+    0,
+    2,
+    4,
+    6,
+    7
+  ],
+  "valid_pairs": [
+    [
+      0,
+      6
+    ],
+    [
+      0,
+      7
+    ],
+    [
+      2,
+      6
+    ]
+  ],
+  "chosen": [
+    0,
+    6
+  ],
+  "rule": "both relevant sets detected with top-k precision 1 on 100,000 samples, disjoint; ties go to the lowest function index",
+  "relevant_sets": {
+    "0": [
+      "age"
+    ],
+    "1": [
+      "age",
+      "salary"
+    ],
+    "2": [
+      "age",
+      "elevel"
+    ],
+    "3": [
+      "age",
+      "elevel",
+      "salary"
+    ],
+    "4": [
+      "age",
+      "salary",
+      "loan"
+    ],
+    "5": [
+      "age",
+      "salary",
+      "commission"
+    ],
+    "6": [
+      "salary",
+      "commission",
+      "loan"
+    ],
+    "7": [
+      "salary",
+      "commission",
+      "elevel"
+    ],
+    "8": [
+      "salary",
+      "commission",
+      "elevel",
+      "loan"
+    ],
+    "9": [
+      "salary",
+      "commission",
+      "elevel",
+      "hvalue",
+      "hyears"
+    ]
+  },
+  "oracle_prec": {
+    "0": 1.0,
+    "1": 0.5,
+    "2": 1.0,
+    "3": 0.3333333333333333,
+    "4": 1.0,
+    "5": 0.6666666666666666,
+    "6": 1.0,
+    "7": 1.0,
+    "8": 0.75,
+    "9": 0.8
+  },
+  "seed": 99,
+  "n": 100000,
+  "f0_failure_case": {
+    "oracle_prec": 1.0,
+    "note": "F0 labels by age < 40 or age >= 60: both classes have about the same mean age, so a class-mean (between/within variance) statistic cannot see it."
+  },
+  "git": {
+    "commit": "e898aa5794b846ea0bbd7357a5183020f914fbc8",
+    "branch": "feature/wf2-sq3-validity",
+    "uncommitted_changes": false
+  },
+  "versions": {
+    "python": "3.12.10",
+    "numpy": "2.4.2",
+    "scipy": "1.17.1",
+    "matplotlib": "3.10.7",
+    "river": "0.27.0"
+  }
+}
