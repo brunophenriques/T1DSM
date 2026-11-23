@@ -133,8 +133,35 @@ def _versions():
     return v
 
 
-def run_config(cfg, seeds=None, variants=None, plot=False, outdir=None, config_file=None, quiet=False):
-    """Run every (variant, seed) of a config, save per-seed files and a per-variant summary.json."""
+def _run_and_save(cfg, vname, mparams, s, vroot, plot, config_file, git, versions):
+    """One (variant, seed): run, analyse, write the seed folder, return the metrics. Top-level so that
+    it can run in a worker process (run_config(jobs > 1))."""
+    started = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
+    res = run_one(cfg, s, log=True, model_cfg=mparams)
+    st, lg = res["stream"], res["logger"]
+    arr = lg.arrays()
+    m = analyze(arr, st.truth, st.drift_points, cfg["analysis"], cfg["checkpoint_every"], st.drift_widths)
+    m.update(acc_final=res["acc_final"], f1_final=res["f1_final"], rules_final=int(res["n_rules"][-1]),
+             proc_time_s=res["proc_time_s"], log_time_s=res["log_time_s"])
+    d = Path(vroot) / f"seed_{s}"
+    lg.save(str(d))
+    json.dump(m, open(d / "metrics.json", "w"), indent=2)
+    json.dump(dict(config_name=cfg["name"], config_file=config_file, variant=vname, seed=s,
+                   model_params=mparams, stream=st.meta, n=int(len(st.y)), d=int(st.X.shape[1]),
+                   drift_points=st.drift_points, drift_widths=st.drift_widths,
+                   rule_events_final=res["events"], started_utc=started,
+                   proc_time_s=res["proc_time_s"], log_time_s=res["log_time_s"],
+                   git=git, versions=versions),
+              open(d / "meta.json", "w"), indent=2)
+    if plot:
+        plot_run(arr, st, str(d / "trajectories.png"), cfg["checkpoint_every"])
+    return m
+
+
+def run_config(cfg, seeds=None, variants=None, plot=False, outdir=None, config_file=None, quiet=False, jobs=1):
+    """Run every (variant, seed) of a config, save per-seed files and a per-variant summary.json.
+    jobs > 1 runs the (variant, seed) pairs in that many worker processes. Every run is independent
+    (its own stream and model), so the files are identical to a sequential run except the timings."""
     seeds = list(seeds) if seeds else list(cfg["seeds"])
     root = Path(outdir or cfg["outdir"]) / cfg["name"]
     if "variants" in cfg:
@@ -143,32 +170,25 @@ def run_config(cfg, seeds=None, variants=None, plot=False, outdir=None, config_f
     else:
         todo = [(None, cfg["model"])]
     git, versions = _git_info(), _versions()
+    vroots = {vname: (root / vname if vname else root) for vname, _ in todo}
+    tasks = [(vname, mparams, s) for vname, mparams in todo for s in seeds]
+    results = {}
+    if jobs > 1 and len(tasks) > 1:
+        from concurrent.futures import ProcessPoolExecutor
+        with ProcessPoolExecutor(max_workers=min(jobs, len(tasks))) as pool:
+            futs = {(v, s): pool.submit(_run_and_save, cfg, v, mp, s, vroots[v], plot, config_file, git, versions)
+                    for v, mp, s in tasks}
+            for key, fut in futs.items():
+                results[key] = fut.result()
+    else:
+        for v, mp, s in tasks:
+            results[(v, s)] = _run_and_save(cfg, v, mp, s, vroots[v], plot, config_file, git, versions)
     summaries = {}
     for vname, mparams in todo:
-        vroot = root / vname if vname else root
-        per_seed = []
-        for s in seeds:
-            started = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
-            res = run_one(cfg, s, log=True, model_cfg=mparams)
-            st, lg = res["stream"], res["logger"]
-            arr = lg.arrays()
-            m = analyze(arr, st.truth, st.drift_points, cfg["analysis"], cfg["checkpoint_every"], st.drift_widths)
-            m.update(acc_final=res["acc_final"], f1_final=res["f1_final"], rules_final=int(res["n_rules"][-1]),
-                     proc_time_s=res["proc_time_s"], log_time_s=res["log_time_s"])
-            d = vroot / f"seed_{s}"
-            lg.save(str(d))
-            json.dump(m, open(d / "metrics.json", "w"), indent=2)
-            json.dump(dict(config_name=cfg["name"], config_file=config_file, variant=vname, seed=s,
-                           model_params=mparams, stream=st.meta, n=int(len(st.y)), d=int(st.X.shape[1]),
-                           drift_points=st.drift_points, drift_widths=st.drift_widths,
-                           rule_events_final=res["events"], started_utc=started,
-                           proc_time_s=res["proc_time_s"], log_time_s=res["log_time_s"],
-                           git=git, versions=versions),
-                      open(d / "meta.json", "w"), indent=2)
-            if plot:
-                plot_run(arr, st, str(d / "trajectories.png"), cfg["checkpoint_every"])
-            per_seed.append(m)
-            if not quiet:
+        vroot = vroots[vname]
+        per_seed = [results[(vname, s)] for s in seeds]
+        if not quiet:
+            for s, m in zip(seeds, per_seed):
                 tag = f"[{vname}] " if vname else ""
                 print(f"{tag}seed {s}: acc={m['acc_final']:.4f} f1={m['f1_final']:.4f} "
                       f"rules={m['rules_final']} time={m['proc_time_s']:.1f}s")
@@ -191,10 +211,11 @@ def main():
     ap.add_argument("--variants", nargs="*", help="subset of the config's variants (default: all)")
     ap.add_argument("--outdir", help="override the config's outdir (e.g. one folder per workflow)")
     ap.add_argument("--plot", action="store_true")
+    ap.add_argument("--jobs", type=int, default=1, help="worker processes for the (variant, seed) runs")
     args = ap.parse_args()
     cfg = json.load(open(args.config))
     run_config(cfg, seeds=args.seeds, variants=args.variants, plot=args.plot,
-               outdir=args.outdir, config_file=args.config)
+               outdir=args.outdir, config_file=args.config, jobs=args.jobs)
 
 
 if __name__ == "__main__":
