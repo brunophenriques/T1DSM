@@ -1,0 +1,466 @@
+{
+  "config": {
+    "name": "s5_agrawal_pair",
+    "note": "S5: river Agrawal, labelling function F0 -> F6 at 10,000 (abrupt). Pair chosen by the frozen selection rule (PROTOCOL.md \u00a76) from the oracle check (results_wf2/oracle/selection.json). Relevant sets from the generator code: {age} -> {salary, commission, loan}; k = number of relevant features in each segment (topk = truth). Role from wf2_drift_validity/pilot_agrawal.py.",
+    "role": "see results_wf2/pilot_agrawal.json",
+    "seeds": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9
+    ],
+    "stream": {
+      "type": "agrawal",
+      "n": 20000,
+      "function_before": 0,
+      "function_after": 6,
+      "drift_at": 10000,
+      "drift_width": 0
+    },
+    "variants": {
+      "ref": {
+        "max_rules": 5,
+        "tau_merge": 0.62,
+        "safe_threshold": 0.07,
+        "min_firing_for_update": 0.05,
+        "drift_sensitivity": 0.35
+      },
+      "open": {
+        "max_rules": null,
+        "tau_merge": 0.62,
+        "safe_threshold": 0.07,
+        "min_firing_for_update": 0.05,
+        "drift_sensitivity": 0.35
+      }
+    },
+    "checkpoint_every": 50,
+    "acc_window": 500,
+    "analysis": {
+      "lags_samples": [
+        50,
+        200,
+        500,
+        2000
+      ],
+      "topk": "truth",
+      "recovery_precision": 1.0,
+      "recovery_consecutive": 3,
+      "warmup_flush": 200,
+      "acc_tol": 0.02,
+      "acc_pre_samples": 1000,
+      "acc_consecutive": 3,
+      "acc_trough_samples": 1000
+    },
+    "outdir": "results_wf2",
+    "perm_importance": {
+      "every": 500,
+      "window": 200,
+      "repeats": 5
+    }
+  },
+  "variant": "ref",
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+  ],
+  "summary": {
+    "acc/drop/drift1": {
+      "mean": 0.19721999999999998,
+      "std": 0.028701073150668027,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "acc/recovered/drift1": {
+      "mean": 0.0,
+      "std": 0.0,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "acc/recovery/drift1": {
+      "mean": null,
+      "std": null,
+      "n_valid": 0,
+      "n_seeds": 10
+    },
+    "acc/recovery_censored/drift1": {
+      "mean": 10000.0,
+      "std": 0.0,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "acc_final": {
+      "mean": 0.58726,
+      "std": 0.0033378735745980583,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "agree/P_vs_G/topk_overlap/seg0": {
+      "mean": 0.11111111111111112,
+      "std": 0.0,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "agree/P_vs_G/topk_overlap/seg1": {
+      "mean": 0.3333333333333332,
+      "std": 5.551115123125783e-17,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "f1_final": {
+      "mean": 0.5293128896732177,
+      "std": 0.011277057761872343,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "frac_constant/A": {
+      "mean": 0.8004999999999999,
+      "std": 0.399,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "frac_constant/G": {
+      "mean": 0.0,
+      "std": 0.0,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "log_time_s": {
+      "mean": 56.29506020999061,
+      "std": 0.7625930155356943,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "n_checkpoints": {
+      "mean": 400.0,
+      "std": 0.0,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "perm/base_acc/seg0": {
+      "mean": 0.66995,
+      "std": 0.009412624501168669,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "perm/base_acc/seg1": {
+      "mean": 0.5248250000000001,
+      "std": 0.005663534673682144,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "perm/n_clean/seg0": {
+      "mean": 20.0,
+      "std": 0.0,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "perm/n_clean/seg1": {
+      "mean": 20.0,
+      "std": 0.0,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "perm_time_s": {
+      "mean": 56.17541675999919,
+      "std": 0.7612535369906764,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "proc_time_s": {
+      "mean": 7.105264110009284,
+      "std": 0.22106550633174896,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "recovered/A/drift1": {
+      "mean": 0.0,
+      "std": 0.0,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "recovered/G/drift1": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "recovery/A/drift1": {
+      "mean": null,
+      "std": null,
+      "n_valid": 0,
+      "n_seeds": 10
+    },
+    "recovery/G/drift1": {
+      "mean": 2250.0,
+      "std": 1947.9476378999514,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "recovery_censored/A/drift1": {
+      "mean": 10000.0,
+      "std": 0.0,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "recovery_censored/G/drift1": {
+      "mean": 2250.0,
+      "std": 1947.9476378999514,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "recovery_from_dp/A/drift1": {
+      "mean": null,
+      "std": null,
+      "n_valid": 0,
+      "n_seeds": 10
+    },
+    "recovery_from_dp/G/drift1": {
+      "mean": 2250.0,
+      "std": 1947.9476378999514,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "recovery_from_dp_censored/A/drift1": {
+      "mean": 10000.0,
+      "std": 0.0,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "recovery_from_dp_censored/G/drift1": {
+      "mean": 2250.0,
+      "std": 1947.9476378999514,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "rules_final": {
+      "mean": 5.0,
+      "std": 0.0,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "stab/A/jaccard/lag200": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 2,
+      "n_seeds": 10
+    },
+    "stab/A/jaccard/lag2000": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 2,
+      "n_seeds": 10
+    },
+    "stab/A/jaccard/lag50": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 2,
+      "n_seeds": 10
+    },
+    "stab/A/jaccard/lag500": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 2,
+      "n_seeds": 10
+    },
+    "stab/A/tau_b/lag200": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 2,
+      "n_seeds": 10
+    },
+    "stab/A/tau_b/lag2000": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 2,
+      "n_seeds": 10
+    },
+    "stab/A/tau_b/lag50": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 2,
+      "n_seeds": 10
+    },
+    "stab/A/tau_b/lag500": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 2,
+      "n_seeds": 10
+    },
+    "stab/G/jaccard/lag200": {
+      "mean": 0.3905440414507772,
+      "std": 0.02090956058244585,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "stab/G/jaccard/lag2000": {
+      "mean": 0.3868789808917198,
+      "std": 0.02629724882863626,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "stab/G/jaccard/lag50": {
+      "mean": 0.5866836734693879,
+      "std": 0.02012391330516681,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "stab/G/jaccard/lag500": {
+      "mean": 0.39296791443850265,
+      "std": 0.025631672071319615,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "stab/G/tau_b/lag200": {
+      "mean": 0.22311456534254465,
+      "std": 0.011406702594478239,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "stab/G/tau_b/lag2000": {
+      "mean": 0.22478768577494695,
+      "std": 0.02134439306549511,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "stab/G/tau_b/lag50": {
+      "mean": 0.45117630385487517,
+      "std": 0.012632512748980524,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "stab/G/tau_b/lag500": {
+      "mean": 0.22204396910279262,
+      "std": 0.011639237139817713,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "struct/created_total": {
+      "mean": 11.8,
+      "std": 3.627671429443411,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "struct/removed_total": {
+      "mean": 6.8,
+      "std": 3.627671429443411,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "struct/rules_mean": {
+      "mean": 5.0,
+      "std": 0.0,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "valid/A/auc/seg0": {
+      "mean": 0.475,
+      "std": 0.12247448713915891,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "valid/A/auc/seg1": {
+      "mean": 0.5222222222222221,
+      "std": 0.10886621079036343,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "valid/A/prec_at_k/seg0": {
+      "mean": 0.0888888888888889,
+      "std": 0.04444444444444445,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "valid/A/prec_at_k/seg1": {
+      "mean": 0.33333333333333337,
+      "std": 0.149071198499986,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "valid/G/auc/seg0": {
+      "mean": 0.7329314720812183,
+      "std": 0.03117342585567839,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "valid/G/auc/seg1": {
+      "mean": 0.8284263959390863,
+      "std": 0.012632694724148923,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "valid/G/prec_at_k/seg0": {
+      "mean": 0.44517766497461936,
+      "std": 0.04580075648104377,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "valid/G/prec_at_k/seg1": {
+      "mean": 0.7126903553299493,
+      "std": 0.014051126559747308,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "valid/P/auc/seg0": {
+      "mean": 0.5,
+      "std": 0.0,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "valid/P/auc/seg1": {
+      "mean": 0.5,
+      "std": 0.0,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "valid/P/prec_at_k/seg0": {
+      "mean": 0.11111111111111112,
+      "std": 0.0,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "valid/P/prec_at_k/seg1": {
+      "mean": 0.3333333333333332,
+      "std": 5.551115123125783e-17,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "var/A/seg0": {
+      "mean": 8.7234430426323e-07,
+      "std": 1.7495922270720448e-06,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "var/A/seg1": {
+      "mean": 1.2903464318140536e-07,
+      "std": 3.5834956999690447e-07,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "var/G/seg0": {
+      "mean": 0.06257018963039487,
+      "std": 0.0030352601719235905,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "var/G/seg1": {
+      "mean": 7.568549918826885e-05,
+      "std": 1.9103467434685807e-05,
+      "n_valid": 10,
+      "n_seeds": 10
+    }
+  }
+}
