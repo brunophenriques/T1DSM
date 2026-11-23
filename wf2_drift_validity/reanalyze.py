@@ -36,13 +36,14 @@ def reanalyze_seed(seed_dir: Path) -> tuple:
         arr = {k: z[k] for k in z.files}
     old = json.load(open(seed_dir / "metrics.json"))
     new = analyze(arr, st.truth, st.drift_points, cfg["analysis"], cfg["checkpoint_every"], st.drift_widths)
-    changed = [k for k in old if k not in KEEP and k in new and not _same(old[k], new[k])]
-    missing = [k for k in old if k not in KEEP and k not in new]
+    keep = lambda k: k in KEEP or k == "perm_time_s" or k.startswith(("valid/P/", "agree/P_vs_G/", "perm/"))
+    changed = [k for k in old if not keep(k) and k in new and not _same(old[k], new[k])]
+    missing = [k for k in old if not keep(k) and k not in new]
     if changed or missing:
         raise SystemExit(f"{seed_dir}: existing metrics would change {changed} or disappear {missing}")
     added = sorted(k for k in new if k not in old)
     merged = dict(new)
-    merged.update({k: old[k] for k in KEEP if k in old})
+    merged.update({k: v for k, v in old.items() if keep(k)})     # R5 metrics come from permutation.npz
     json.dump(merged, open(seed_dir / "metrics.json", "w"), indent=2)
     return merged, added, cfg
 

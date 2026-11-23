@@ -1,0 +1,58 @@
+{
+  "name": "s5f0_agrawal_f0",
+  "note": "Agrawal F0 alone (stationary): the documented failure case. y = 1[age < 40 or age >= 60]; the class means of age differ by only 0.74 years, so a class-mean statistic barely sees it (PROTOCOL.md \u00a76).",
+  "role": "see results_wf2/pilot_agrawal.json",
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+  ],
+  "stream": {
+    "type": "agrawal",
+    "n": 20000,
+    "function_before": 0,
+    "drift_at": null
+  },
+  "variants": {
+    "ref": {
+      "max_rules": 5,
+      "tau_merge": 0.62,
+      "safe_threshold": 0.07,
+      "min_firing_for_update": 0.05,
+      "drift_sensitivity": 0.35
+    },
+    "open": {
+      "max_rules": null,
+      "tau_merge": 0.62,
+      "safe_threshold": 0.07,
+      "min_firing_for_update": 0.05,
+      "drift_sensitivity": 0.35
+    }
+  },
+  "checkpoint_every": 50,
+  "acc_window": 500,
+  "analysis": {
+    "lags_samples": [
+      50,
+      200,
+      500,
+      2000
+    ],
+    "topk": "truth",
+    "recovery_precision": 1.0,
+    "recovery_consecutive": 3,
+    "warmup_flush": 200,
+    "acc_tol": 0.02,
+    "acc_pre_samples": 1000,
+    "acc_consecutive": 3,
+    "acc_trough_samples": 1000
+  },
+  "outdir": "results_wf2"
+}
