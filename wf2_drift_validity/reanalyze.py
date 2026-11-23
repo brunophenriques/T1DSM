@@ -52,7 +52,7 @@ def main():
     ap.add_argument("roots", nargs="*", default=[str(ROOT / "results_wf2")])
     args = ap.parse_args()
     n_runs, added_all = 0, set()
-    for root in map(Path, args.roots):
+    for root in (Path(r).resolve() for r in args.roots):
         for summary in sorted(root.rglob("summary.json")):
             vdir = summary.parent
             seed_dirs = sorted((p for p in vdir.glob("seed_*") if (p / "checkpoints.npz").exists()),
