@@ -1,0 +1,328 @@
+{
+  "config": {
+    "name": "wf1_elec2_shuffled_nodate",
+    "seeds": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29
+    ],
+    "model": {
+      "max_rules": 5,
+      "tau_merge": 0.62,
+      "safe_threshold": 0.07,
+      "min_firing_for_update": 0.05,
+      "drift_sensitivity": 0.35
+    },
+    "checkpoint_every": 50,
+    "acc_window": 200,
+    "outdir": "results_relevance",
+    "stream": {
+      "type": "river",
+      "name": "Elec2",
+      "n": 10000,
+      "scaling": "domain",
+      "bounds": {
+        "day": [
+          1,
+          7
+        ]
+      },
+      "shuffle": true,
+      "drop": [
+        "date"
+      ]
+    },
+    "analysis": {
+      "lags_samples": [
+        50,
+        100,
+        150,
+        200,
+        500,
+        2000
+      ],
+      "topk": 3,
+      "recovery_precision": 1.0,
+      "recovery_consecutive": 3,
+      "warmup_flush": 200,
+      "acc_tol": 0.02
+    }
+  },
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29
+  ],
+  "summary": {
+    "acc_final": {
+      "mean": 0.5624633333333333,
+      "std": 0.001490521907103534,
+      "n_valid": 30,
+      "n_seeds": 30
+    },
+    "frac_constant/A": {
+      "mean": 0.9668333333333333,
+      "std": 0.17860796610329435,
+      "n_valid": 30,
+      "n_seeds": 30
+    },
+    "frac_constant/G": {
+      "mean": 0.0,
+      "std": 0.0,
+      "n_valid": 30,
+      "n_seeds": 30
+    },
+    "log_time_s": {
+      "mean": 0.09146973671158776,
+      "std": 0.008156080485249866,
+      "n_valid": 30,
+      "n_seeds": 30
+    },
+    "n_checkpoints": {
+      "mean": 200.0,
+      "std": 0.0,
+      "n_valid": 30,
+      "n_seeds": 30
+    },
+    "proc_time_s": {
+      "mean": 4.881762529955692,
+      "std": 0.4229580402148323,
+      "n_valid": 30,
+      "n_seeds": 30
+    },
+    "rules_final": {
+      "mean": 5.0,
+      "std": 0.0,
+      "n_valid": 30,
+      "n_seeds": 30
+    },
+    "stab/A/jaccard/lag100": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 30
+    },
+    "stab/A/jaccard/lag150": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 30
+    },
+    "stab/A/jaccard/lag200": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 30
+    },
+    "stab/A/jaccard/lag2000": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 30
+    },
+    "stab/A/jaccard/lag50": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 30
+    },
+    "stab/A/jaccard/lag500": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 30
+    },
+    "stab/A/tau_b/lag100": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 30
+    },
+    "stab/A/tau_b/lag150": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 30
+    },
+    "stab/A/tau_b/lag200": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 30
+    },
+    "stab/A/tau_b/lag2000": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 30
+    },
+    "stab/A/tau_b/lag50": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 30
+    },
+    "stab/A/tau_b/lag500": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 30
+    },
+    "stab/G/jaccard/lag100": {
+      "mean": 0.9100854700854701,
+      "std": 0.018214555562355544,
+      "n_valid": 30,
+      "n_seeds": 30
+    },
+    "stab/G/jaccard/lag150": {
+      "mean": 0.8943298969072163,
+      "std": 0.020554022718945245,
+      "n_valid": 30,
+      "n_seeds": 30
+    },
+    "stab/G/jaccard/lag200": {
+      "mean": 0.8833333333333333,
+      "std": 0.023729620895463502,
+      "n_valid": 30,
+      "n_seeds": 30
+    },
+    "stab/G/jaccard/lag2000": {
+      "mean": 0.8846072186836519,
+      "std": 0.025446947107253346,
+      "n_valid": 30,
+      "n_seeds": 30
+    },
+    "stab/G/jaccard/lag50": {
+      "mean": 0.9314625850340136,
+      "std": 0.014092062915555514,
+      "n_valid": 30,
+      "n_seeds": 30
+    },
+    "stab/G/jaccard/lag500": {
+      "mean": 0.887344028520499,
+      "std": 0.023459762957256887,
+      "n_valid": 30,
+      "n_seeds": 30
+    },
+    "stab/G/tau_b/lag100": {
+      "mean": 0.9692199748665747,
+      "std": 0.004893671786065627,
+      "n_valid": 30,
+      "n_seeds": 30
+    },
+    "stab/G/tau_b/lag150": {
+      "mean": 0.9641166795862,
+      "std": 0.0057996572820321265,
+      "n_valid": 30,
+      "n_seeds": 30
+    },
+    "stab/G/tau_b/lag200": {
+      "mean": 0.9606090238267159,
+      "std": 0.006696553844439871,
+      "n_valid": 30,
+      "n_seeds": 30
+    },
+    "stab/G/tau_b/lag2000": {
+      "mean": 0.9612931313602873,
+      "std": 0.007111678143541759,
+      "n_valid": 30,
+      "n_seeds": 30
+    },
+    "stab/G/tau_b/lag50": {
+      "mean": 0.976895998329746,
+      "std": 0.0038817532020706935,
+      "n_valid": 30,
+      "n_seeds": 30
+    },
+    "stab/G/tau_b/lag500": {
+      "mean": 0.9620585508340294,
+      "std": 0.007322392811879607,
+      "n_valid": 30,
+      "n_seeds": 30
+    },
+    "struct/created_total": {
+      "mean": 12.666666666666666,
+      "std": 6.246776946731988,
+      "n_valid": 30,
+      "n_seeds": 30
+    },
+    "struct/removed_total": {
+      "mean": 7.666666666666667,
+      "std": 6.246776946731987,
+      "n_valid": 30,
+      "n_seeds": 30
+    },
+    "struct/rules_mean": {
+      "mean": 5.0,
+      "std": 0.0,
+      "n_valid": 30,
+      "n_seeds": 30
+    },
+    "var/A/seg0": {
+      "mean": 6.46805537637578e-07,
+      "std": 3.4831544183455975e-06,
+      "n_valid": 30,
+      "n_seeds": 30
+    },
+    "var/G/seg0": {
+      "mean": 0.0004944052709264454,
+      "std": 7.63269990496871e-05,
+      "n_valid": 30,
+      "n_seeds": 30
+    }
+  }
+}

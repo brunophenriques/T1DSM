@@ -1,0 +1,266 @@
+{
+  "config": {
+    "name": "wf1_elec2",
+    "seeds": [
+      0
+    ],
+    "model": {
+      "max_rules": 5,
+      "tau_merge": 0.62,
+      "safe_threshold": 0.07,
+      "min_firing_for_update": 0.05,
+      "drift_sensitivity": 0.35
+    },
+    "checkpoint_every": 50,
+    "acc_window": 200,
+    "outdir": "results_relevance",
+    "stream": {
+      "type": "river",
+      "name": "Elec2",
+      "n": 10000,
+      "scaling": "domain",
+      "bounds": {
+        "day": [
+          1,
+          7
+        ]
+      }
+    },
+    "analysis": {
+      "lags_samples": [
+        50,
+        100,
+        150,
+        200,
+        500,
+        2000
+      ],
+      "topk": 3,
+      "recovery_precision": 1.0,
+      "recovery_consecutive": 3,
+      "warmup_flush": 200,
+      "acc_tol": 0.02
+    }
+  },
+  "seeds": [
+    0
+  ],
+  "summary": {
+    "acc_final": {
+      "mean": 0.5915,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 1
+    },
+    "frac_constant/A": {
+      "mean": 0.005,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 1
+    },
+    "frac_constant/G": {
+      "mean": 0.0,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 1
+    },
+    "log_time_s": {
+      "mean": 0.20818509859964252,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 1
+    },
+    "n_checkpoints": {
+      "mean": 200.0,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 1
+    },
+    "proc_time_s": {
+      "mean": 7.9747796013980405,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 1
+    },
+    "rules_final": {
+      "mean": 5.0,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 1
+    },
+    "stab/A/jaccard/lag100": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 1
+    },
+    "stab/A/jaccard/lag150": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 1
+    },
+    "stab/A/jaccard/lag200": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 1
+    },
+    "stab/A/jaccard/lag2000": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 1
+    },
+    "stab/A/jaccard/lag50": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 1
+    },
+    "stab/A/jaccard/lag500": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 1
+    },
+    "stab/A/tau_b/lag100": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 1
+    },
+    "stab/A/tau_b/lag150": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 1
+    },
+    "stab/A/tau_b/lag200": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 1
+    },
+    "stab/A/tau_b/lag2000": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 1
+    },
+    "stab/A/tau_b/lag50": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 1
+    },
+    "stab/A/tau_b/lag500": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 1
+    },
+    "stab/G/jaccard/lag100": {
+      "mean": 0.7148717948717948,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 1
+    },
+    "stab/G/jaccard/lag150": {
+      "mean": 0.6835051546391753,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 1
+    },
+    "stab/G/jaccard/lag200": {
+      "mean": 0.6481865284974093,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 1
+    },
+    "stab/G/jaccard/lag2000": {
+      "mean": 0.6923566878980892,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 1
+    },
+    "stab/G/jaccard/lag50": {
+      "mean": 0.7882653061224489,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 1
+    },
+    "stab/G/jaccard/lag500": {
+      "mean": 0.6925133689839572,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 1
+    },
+    "stab/G/tau_b/lag100": {
+      "mean": 0.8703589743589742,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 1
+    },
+    "stab/G/tau_b/lag150": {
+      "mean": 0.8511340206185567,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 1
+    },
+    "stab/G/tau_b/lag200": {
+      "mean": 0.8391709844559584,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 1
+    },
+    "stab/G/tau_b/lag2000": {
+      "mean": 0.8486624203821657,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 1
+    },
+    "stab/G/tau_b/lag50": {
+      "mean": 0.8995918367346939,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 1
+    },
+    "stab/G/tau_b/lag500": {
+      "mean": 0.8588235294117645,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 1
+    },
+    "struct/created_total": {
+      "mean": 62.0,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 1
+    },
+    "struct/removed_total": {
+      "mean": 57.0,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 1
+    },
+    "struct/rules_mean": {
+      "mean": 5.0,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 1
+    },
+    "var/A/seg0": {
+      "mean": 0.00012534961802387686,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 1
+    },
+    "var/G/seg0": {
+      "mean": 0.004884978879176626,
+      "std": 0.0,
+      "n_valid": 1,
+      "n_seeds": 1
+    }
+  }
+}

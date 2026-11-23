@@ -17,6 +17,7 @@ All synthetic streams use fixed, known bounds, so no data-dependent scaling is n
 from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import List, Optional
+import warnings
 import numpy as np
 
 
@@ -230,8 +231,9 @@ def expanding_minmax(X: np.ndarray) -> np.ndarray:
     return (X - lo) / den
 
 
-def stream_from_river(ds, n_max: int, drop=None, name: str = "river") -> Stream:
-    """Vectorise a river dataset, drop the named features, then scale with expanding min-max."""
+def stream_from_river(ds, n_max: int, drop=None, name: str = "river",
+                      scaling: str = "expanding", bounds: dict | None = None) -> Stream:
+    """Vectorise a River dataset using causal or fixed-domain scaling."""
     drop = set(drop or [])
     it = iter(ds)
     x0, y0 = next(it)
@@ -243,14 +245,47 @@ def stream_from_river(ds, n_max: int, drop=None, name: str = "river") -> Stream:
         rows.append([x[f] for f in names]); labels.append(y)
     uniq = list(dict.fromkeys(labels))
     y_int = np.array([uniq.index(v) for v in labels], dtype=int)
-    X = expanding_minmax(np.asarray(rows, dtype=float))
-    return Stream(X=X, y=y_int, truth=None, drift_points=[], feature_names=names,
-                  meta=dict(family="river", name=name, n=n_max, dropped=sorted(drop), scaling="expanding_minmax"))
+    X = np.asarray(rows, dtype=float)
+    if scaling == "domain":
+        # fixed, documented per-feature bounds (default [0,1]); order-independent, so the shuffled control sees the same scaling
+        lo = np.array([(bounds or {}).get(n, [0.0, 1.0])[0] for n in names], dtype=float)
+        hi = np.array([(bounds or {}).get(n, [0.0, 1.0])[1] for n in names], dtype=float)
+        if not np.all(np.isfinite(lo) & np.isfinite(hi) & (hi > lo)):
+            raise ValueError("feature bounds must be finite with upper > lower")
+        X = (X - lo) / (hi - lo)
+        bad = [names[j] for j in range(X.shape[1]) if X[:, j].min() < -1e-9 or X[:, j].max() > 1 + 1e-9]
+        if bad:
+            raise ValueError(f"features outside their declared bounds: {bad}; add them to 'bounds'")
+    elif scaling == "expanding":
+        mono = [names[j] for j in range(X.shape[1])
+                if np.ptp(X[:, j]) > 0 and (np.all(np.diff(X[:, j]) >= 0) or np.all(np.diff(X[:, j]) <= 0))]
+        if mono:
+            warnings.warn(f"monotone features {mono} collapse to a constant under expanding min-max; "
+                          f"use scaling='none' if the data is already in [0,1]")
+        X = expanding_minmax(X)
+    elif scaling == "none":      # data already in [0,1]: nothing to leak, nothing to distort
+        if X.min() < -1e-9 or X.max() > 1 + 1e-9:
+            raise ValueError("scaling='none' but features are outside [0,1]: "
+                             f"min={X.min():.3g}, max={X.max():.3g}; use scaling='expanding'")
+    else:
+        raise ValueError(f"unknown scaling {scaling}")
+    meta = dict(family="river", name=name, n=n_max, dropped=sorted(drop),
+                scaling="expanding_minmax" if scaling == "expanding" else scaling)
+    if scaling == "domain":
+        meta["bounds"] = dict(bounds or {})
+    return Stream(X=X, y=y_int, truth=None, drift_points=[], feature_names=names, meta=meta)
 
 
-def load_river_stream(name: str, n_max: int, drop=None) -> Stream:
+def load_river_stream(name: str, n_max: int, scaling="expanding", bounds: dict | None = None,
+                      drop=None) -> Stream:
+    """Load River data; also accept the legacy third positional drop argument."""
+    if not isinstance(scaling, str):
+        if drop is not None:
+            raise TypeError("drop was supplied twice")
+        drop, scaling = scaling, "expanding"
     from river import datasets  # lazy import
-    return stream_from_river(getattr(datasets, name)(), n_max, drop=drop, name=name)
+    return stream_from_river(getattr(datasets, name)(), n_max, drop=drop, name=name,
+                             scaling=scaling, bounds=bounds)
 
 
 def shuffle_control(st: Stream, seed: int) -> Stream:
@@ -258,6 +293,87 @@ def shuffle_control(st: Stream, seed: int) -> Stream:
     p = np.random.default_rng(seed).permutation(len(st.y))
     return Stream(X=st.X[p], y=st.y[p], truth=None, drift_points=[], feature_names=st.feature_names,
                   meta=dict(st.meta, shuffled=True, shuffle_seed=seed))
+
+
+# ---------------------------------------------------------------------------
+# Agrawal-based drift stream with FUNCTIONAL ground truth.
+# Re-implements the feature distributions and the 10 classification functions of
+# river.datasets.synth.Agrawal (source read on 19 Nov 2026), vectorised, so that the
+# label function and therefore the set of attributes it depends on is known exactly.
+# Not seed-identical to river. tests/test_nonintrusive.py checks the labels against river.
+# ---------------------------------------------------------------------------
+# fixed, documented value ranges used for scaling (domain knowledge, no future information)
+_AG_LO = np.array([20000, 0, 20, 0, 1, 0, 0, 1, 0.0])
+# commission goes up to 85k in river's code (10000 + 75000*rand), although its docstring says 75k
+_AG_HI = np.array([150000, 85000, 80, 4, 20, 8, 1.2e6, 30, 500000.0])
+# attributes each classification function reads (from the source); indices into AGRAWAL_FEATURES
+_AGRAWAL_DRIFT_RELEVANT = {0: (2,), 1: (0, 2), 2: (2, 3), 3: (0, 2, 3), 4: (0, 2, 8), 5: (0, 1, 2),
+                    6: (0, 1, 8), 7: (0, 1, 3), 8: (0, 1, 3, 8), 9: (0, 1, 3, 6, 7)}
+
+
+def agrawal_raw_features(n: int, rng) -> np.ndarray:
+    salary = 20000 + 130000 * rng.random(n)
+    commission = np.where(salary >= 75000, 0.0, 10000 + 75000 * rng.random(n))
+    age = rng.integers(20, 81, n).astype(float)
+    elevel = rng.integers(0, 5, n).astype(float)
+    car = rng.integers(1, 21, n).astype(float)
+    zipc = rng.integers(0, 9, n).astype(float)
+    hvalue = (8 - zipc) * 100000 * (0.5 + rng.random(n))
+    hyears = rng.integers(1, 31, n).astype(float)
+    loan = rng.random(n) * 500000
+    return np.column_stack([salary, commission, age, elevel, car, zipc, hvalue, hyears, loan])
+
+
+def agrawal_labels(f: int, X: np.ndarray) -> np.ndarray:
+    s, c, a, e, _car, _z, hv, hy, l = X.T
+    if f == 0:
+        return ((a < 40) | (a >= 60)).astype(int)
+    if f == 1:
+        return np.where(a < 40, (50000 <= s) & (s <= 100000),
+                        np.where(a < 60, (75000 <= s) & (s <= 125000), (25000 <= s) & (s <= 75000))).astype(int)
+    if f == 2:
+        return np.where(a < 40, (e == 0) | (e == 1),
+                        np.where(a < 60, (e >= 1) & (e <= 3), (e >= 2) & (e <= 4))).astype(int)
+    if f == 3:
+        return np.where(a < 40, np.where((e == 0) | (e == 1), (25000 <= s) & (s <= 75000), (50000 <= s) & (s <= 100000)),
+               np.where(a < 60, np.where((e >= 1) & (e <= 3), (50000 <= s) & (s <= 100000), (75000 <= s) & (s <= 125000)),
+                        np.where((e >= 2) & (e <= 4), (50000 <= s) & (s <= 100000), (25000 <= s) & (s <= 75000)))).astype(int)
+    if f == 4:
+        return np.where(a < 40, np.where((50000 <= s) & (s <= 100000), (100000 <= l) & (l <= 300000), (200000 <= s) & (s <= 400000)),
+               np.where(a < 60, np.where((75000 <= s) & (s <= 125000), (200000 <= s) & (l <= 400000), (300000 <= s) & (s <= 500000)),
+                        np.where((25000 <= s) & (s <= 75000), (300000 <= l) & (l <= 500000), (75000 <= l) & (l <= 300000)))).astype(int)
+    if f == 5:
+        t = s + c
+        return np.where(a < 40, (50000 <= t) & (t <= 100000),
+                        np.where(a < 60, (75000 <= t) & (t <= 125000), (25000 <= t) & (t <= 75000))).astype(int)
+    if f == 6:
+        return np.where(2 * (s + c) / 3 - l / 5 - 20000 > 1, 0, 1)
+    if f == 7:
+        return np.where(2 * (s + c) / 3 - 5000 * e - 20000 > 1, 0, 1)
+    if f == 8:
+        return np.where(2 * (s + c) / 3 - 5000 * e - l / 5 - 10000 > 1, 0, 1)
+    if f == 9:
+        eq = np.where(hy >= 20, hv * (hy - 20) / 10, 0.0)
+        return np.where(2 * (s + c) / 3 - 5000 * e + eq / 5 - 10000 > 1, 0, 1)
+    raise ValueError("classification function must be 0..9")
+
+
+def agrawal_drift_stream(n=20000, drift_at=10000, f_before=6, f_after=2, seed=0) -> Stream:
+    """Abrupt switch between two Agrawal classification functions. truth = attributes the function reads.
+    drift_at=None -> stationary control with f_before only."""
+    rng = np.random.default_rng(seed)
+    Xr = agrawal_raw_features(n, rng)
+    y = agrawal_labels(f_before, Xr)
+    truth = np.zeros((n, 9), dtype=int)
+    truth[:, list(_AGRAWAL_DRIFT_RELEVANT[f_before])] = 1
+    drift_points: List[int] = []
+    if drift_at is not None and drift_at < n:
+        y = np.where(np.arange(n) < drift_at, y, agrawal_labels(f_after, Xr))
+        truth[drift_at:, :] = 0
+        truth[drift_at:, list(_AGRAWAL_DRIFT_RELEVANT[f_after])] = 1
+        drift_points = [int(drift_at)]
+    X = (Xr - _AG_LO) / (_AG_HI - _AG_LO)
+    return Stream(X=X, y=y.astype(int), truth=truth, drift_points=drift_points, feature_names=AGRAWAL_FEATURES)
 
 
 def build_stream(scfg: dict, seed: int) -> Stream:
@@ -290,7 +406,11 @@ def _build_base(scfg: dict, seed: int) -> Stream:
             n=scfg["n"], drift_at=scfg.get("drift_at"), variant_before=scfg.get("variant_before", 0),
             variant_after=scfg.get("variant_after", 2), drift_width=scfg.get("drift_width", 0),
             label_noise=scfg.get("label_noise", 0.0), seed=seed)
+    if scfg["type"] == "agrawal_drift":
+        return agrawal_drift_stream(n=scfg["n"], drift_at=scfg.get("drift_at"),
+                                    f_before=scfg["f_before"], f_after=scfg["f_after"], seed=seed)
     if scfg["type"] == "river":
-        st = load_river_stream(scfg["name"], scfg["n"], drop=scfg.get("drop"))
+        st = load_river_stream(scfg["name"], scfg["n"], scaling=scfg.get("scaling", "expanding"),
+                               bounds=scfg.get("bounds"), drop=scfg.get("drop"))
         return shuffle_control(st, seed) if scfg.get("shuffle") else st
     raise ValueError(f"unknown stream type {scfg['type']}")
