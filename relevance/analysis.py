@@ -23,7 +23,15 @@ def _nm(x):
 
 def analyze(arr: dict, truth, drift_points, a: dict, every: int, drift_widths=None) -> dict:
     t, G, A, acc = arr["t"], arr["G"], arr["A"], arr["acc_win"]
-    T, k, flush = len(t), a["topk"], a["warmup_flush"]
+    T, flush = len(t), a["warmup_flush"]
+    # k = a fixed number, or "truth": the number of truly relevant features at each checkpoint, for
+    # streams whose concepts have relevant sets of different sizes (S5 Agrawal). PROTOCOL.md §5.
+    if a["topk"] == "truth":
+        if truth is None:
+            raise ValueError('topk="truth" needs a ground-truth mask')
+        kk = truth[t - 1].sum(axis=1).astype(int)
+    else:
+        kk = np.full(T, int(a["topk"]))
     dps = list(drift_points)
     widths = list(drift_widths) if drift_widths else [0] * len(dps)
     tr_start = [dp - w / 2.0 for dp, w in zip(dps, widths)]   # transition start (= dp when abrupt)
@@ -44,7 +52,7 @@ def analyze(arr: dict, truth, drift_points, a: dict, every: int, drift_widths=No
             for i in range(lc, T):
                 j = i - lc
                 if clean[i] and clean[j] and seg[i] == seg[j] and not is_constant(W[i]) and not is_constant(W[j]):
-                    taus.append(tau_b(W[j], W[i])); jacs.append(topk_jaccard(W[j], W[i], k))
+                    taus.append(tau_b(W[j], W[i])); jacs.append(topk_jaccard(W[j], W[i], kk[i]))
             out[f"stab/{name}/tau_b/lag{L}"] = _nm(taus)
             out[f"stab/{name}/jaccard/lag{L}"] = _nm(jacs)
         out[f"frac_constant/{name}"] = float(np.mean([is_constant(W[i]) for i in range(T)]))
@@ -55,7 +63,7 @@ def analyze(arr: dict, truth, drift_points, a: dict, every: int, drift_widths=No
     if truth is not None:
         tr = truth[t - 1]
         for name, W in (("G", G), ("A", A)):
-            prec = np.array([topk_precision(W[i], tr[i], k) for i in range(T)])
+            prec = np.array([topk_precision(W[i], tr[i], kk[i]) for i in range(T)])
             auc_ = np.array([auc(W[i], tr[i]) for i in range(T)])
             for s in range(len(starts)):                         # SQ3: validity
                 m = clean & (seg == s)

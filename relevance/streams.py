@@ -140,6 +140,83 @@ def sea_stream(n=20000, drift_at=10000, variant_before=0, variant_after=2, drift
                             label_noise=label_noise, seed=seed))
 
 
+AGRAWAL_FEATURES = ["salary", "commission", "age", "elevel", "car", "zipcode", "hvalue", "hyears", "loan"]
+# Fixed bounds read from river's generator (agrawal_source.txt = river 0.27.0). Note: commission is 0 or
+# U[10k, 85k], and hvalue = (8 - zipcode) * 100k * U[0.5, 1.5], so it lies in [0, 1.2M].
+AGRAWAL_BOUNDS = {"salary": (20000.0, 150000.0), "commission": (0.0, 85000.0), "age": (20.0, 80.0),
+                  "elevel": (0.0, 4.0), "car": (1.0, 20.0), "zipcode": (0.0, 8.0), "hvalue": (0.0, 1200000.0),
+                  "hyears": (1.0, 30.0), "loan": (0.0, 500000.0)}
+# The features each classification function reads, from the generator code (PROTOCOL.md §6: "relevant
+# sets from the generator code"). Function 4 is reproduced as river implements it (it reads salary and loan).
+AGRAWAL_RELEVANT = {0: ("age",), 1: ("age", "salary"), 2: ("age", "elevel"), 3: ("age", "elevel", "salary"),
+                    4: ("age", "salary", "loan"), 5: ("age", "salary", "commission"),
+                    6: ("salary", "commission", "loan"), 7: ("salary", "commission", "elevel"),
+                    8: ("salary", "commission", "elevel", "loan"),
+                    9: ("salary", "commission", "elevel", "hvalue", "hyears")}
+
+
+def agrawal_relevant_idx(function: int) -> tuple:
+    return tuple(AGRAWAL_FEATURES.index(f) for f in AGRAWAL_RELEVANT[function])
+
+
+def agrawal_stream(n=20000, function_before=2, function_after=None, drift_at=None, drift_width=0, seed=0) -> Stream:
+    """river's Agrawal generator (balance_classes=False, perturbation=0). The features come from
+    river.datasets.synth.Agrawal(seed=seed); with these settings the random draws do not depend on the
+    classification function, so a drift only changes the labelling function: before `drift_at` the
+    labels come from `function_before`, after it from `function_after`.
+    Features are scaled with the generator's fixed bounds (AGRAWAL_BOUNDS), so no data-dependent scaling.
+    Ground truth = the features the active function reads (AGRAWAL_RELEVANT)."""
+    from river.datasets.synth import Agrawal   # lazy import: river is only needed for this stream
+    has_drift = function_after is not None and drift_at is not None and drift_at < n
+    rows = []
+    for i, (x, _) in enumerate(Agrawal(classification_function=function_before, seed=seed)):
+        if i >= n:
+            break
+        rows.append([x[f] for f in AGRAWAL_FEATURES])
+    raw = np.asarray(rows, dtype=float)
+
+    def label(fn):
+        f = getattr(Agrawal, f"_classification_function_{fn}")
+        return np.array([f(*r) for r in raw], dtype=int)
+
+    y = label(function_before)
+    rel_before, rel_after = agrawal_relevant_idx(function_before), ()
+    if has_drift:
+        new = _new_concept_mask(n, drift_at, drift_width, np.random.default_rng(seed))
+        y = np.where(new, label(function_after), y)
+        rel_after = agrawal_relevant_idx(function_after)
+    lo = np.array([AGRAWAL_BOUNDS[f][0] for f in AGRAWAL_FEATURES])
+    hi = np.array([AGRAWAL_BOUNDS[f][1] for f in AGRAWAL_FEATURES])
+    X = np.clip((raw - lo) / (hi - lo), 0.0, 1.0)
+    d = len(AGRAWAL_FEATURES)
+    truth = _truth(n, d, drift_at if has_drift else None, rel_before, rel_after)
+    return Stream(X=X, y=y, truth=truth,
+                  drift_points=[int(drift_at)] if has_drift else [],
+                  feature_names=list(AGRAWAL_FEATURES),
+                  drift_widths=[int(drift_width)] if has_drift else [],
+                  meta=dict(family="agrawal", n=n, function_before=function_before,
+                            function_after=function_after if has_drift else None,
+                            drift_at=drift_at if has_drift else None, drift_width=drift_width,
+                            rel_before=[AGRAWAL_FEATURES[j] for j in rel_before],
+                            rel_after=[AGRAWAL_FEATURES[j] for j in rel_after],
+                            class1_share=float(y.mean()), seed=seed, river_generator="Agrawal",
+                            balance_classes=False, perturbation=0.0))
+
+
+def add_noisy_copy(st: Stream, source: int, noise_sd: float, seed: int) -> Stream:
+    """Append x_d = clip(x_source + N(0, noise_sd), 0, 1): a non-causal copy that is never relevant
+    (S6). The noise uses its own random generator, so the original columns and labels are bit-identical
+    to the stream without the copy."""
+    rng = np.random.default_rng([seed, 6])
+    n, d = st.X.shape
+    copy = np.clip(st.X[:, source] + rng.normal(0.0, noise_sd, n), 0.0, 1.0)
+    truth = None if st.truth is None else np.column_stack([st.truth, np.zeros(n, dtype=st.truth.dtype)])
+    names = (st.feature_names or [f"x{j}" for j in range(d)]) + [f"x{d}"]
+    return Stream(X=np.column_stack([st.X, copy]), y=st.y, truth=truth, drift_points=list(st.drift_points),
+                  feature_names=names, drift_widths=list(st.drift_widths),
+                  meta=dict(st.meta, d=d + 1, copy=dict(column=d, source=source, noise_sd=noise_sd)))
+
+
 def expanding_minmax(X: np.ndarray) -> np.ndarray:
     """Min-max scaling using only samples seen up to and including t (no future leakage).
     The baseline's min_max_scale uses the whole stream, which leaks future information."""
@@ -181,6 +258,19 @@ def shuffle_control(st: Stream, seed: int) -> Stream:
 
 
 def build_stream(scfg: dict, seed: int) -> Stream:
+    """Build the stream of a config's "stream" block. An optional "copy": {"source": j, "noise_sd": s}
+    appends a noisy, never-relevant copy of feature j (S6)."""
+    st = _build_base(scfg, seed)
+    if scfg.get("copy"):
+        st = add_noisy_copy(st, int(scfg["copy"]["source"]), float(scfg["copy"]["noise_sd"]), seed)
+    return st
+
+
+def _build_base(scfg: dict, seed: int) -> Stream:
+    if scfg["type"] == "agrawal":
+        return agrawal_stream(
+            n=scfg["n"], function_before=scfg["function_before"], function_after=scfg.get("function_after"),
+            drift_at=scfg.get("drift_at"), drift_width=scfg.get("drift_width", 0), seed=seed)
     if scfg["type"] == "relevance_drift":
         return relevance_drift_stream(
             n=scfg["n"], d=scfg["d"], drift_at=scfg.get("drift_at"),
