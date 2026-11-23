@@ -146,6 +146,10 @@ def test_analyze_permutation_clean_windows_and_k():
     assert m["perm/n_clean/seg0"] == 2 and m["perm/n_clean/seg1"] == 2     # 1100 is not clean (window touches drift)
     assert m["valid/P/prec_at_k/seg0"] == 1.0 and m["valid/P/prec_at_k/seg1"] == 1.0
     assert m["agree/P_vs_G/jaccard/seg1"] == 1.0
+    # A constant R5 (model ignores its input): precision is chance, agreement is undefined, not 1.0
+    flat = dict(perm, P=[[0.0] * 4] * 5)
+    m = analyze_permutation(flat, truth, [1000], [0], G_t, G, {"topk": 2})
+    assert m["valid/P/prec_at_k/seg0"] == 0.5 and np.isnan(m["agree/P_vs_G/jaccard/seg0"])
 
 
 if __name__ == "__main__":

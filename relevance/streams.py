@@ -9,6 +9,9 @@ Stream families (see PROTOCOL.md, section "Streams"):
                     (a concept the model can actually learn; see the learnability pilot)
   sea             : SEA concepts; the threshold drifts but the relevant set {x0, x1} never changes
                     (negative control: accuracy can drop, the ranking should not move)
+  agrawal         : river's Agrawal generator (S5); a drift switches the labelling function, and the
+                    relevant set is the features that function reads in the generator code
+  "copy" option   : appends a noisy, never-relevant copy of one feature (S6)
 All synthetic streams use fixed, known bounds, so no data-dependent scaling is needed.
 """
 from __future__ import annotations

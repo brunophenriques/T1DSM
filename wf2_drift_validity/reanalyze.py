@@ -16,6 +16,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from relevance.analysis import analyze
+from relevance.permutation import analyze_permutation
 from relevance.streams import build_stream
 from run_relevance import aggregate, _git_info
 
@@ -43,7 +44,18 @@ def reanalyze_seed(seed_dir: Path) -> tuple:
         raise SystemExit(f"{seed_dir}: existing metrics would change {changed} or disappear {missing}")
     added = sorted(k for k in new if k not in old)
     merged = dict(new)
-    merged.update({k: v for k, v in old.items() if keep(k)})     # R5 metrics come from permutation.npz
+    merged.update({k: v for k, v in old.items() if keep(k)})
+    if (seed_dir / "permutation.npz").exists():                   # R5: recompute from permutation.npz
+        with np.load(seed_dir / "permutation.npz") as z:
+            perm = dict(t=z["t"], P=z["P"], base_acc=z["base_acc"], window=meta["perm_importance"]["window"])
+        pm = analyze_permutation(perm, st.truth, st.drift_points, st.drift_widths, arr["t"], arr["G"],
+                                 cfg["analysis"])
+        # Only the R5-vs-R1 agreement may change (it is now undefined when R5 is constant).
+        bad = [k for k in pm if k in old and not k.startswith("agree/P_vs_G/") and not _same(old[k], pm[k])]
+        if bad:
+            raise SystemExit(f"{seed_dir}: R5 metrics would change {bad}")
+        added += [f"updated:{k}" for k in pm if k in old and not _same(old[k], pm[k])]
+        merged.update(pm)
     json.dump(merged, open(seed_dir / "metrics.json", "w"), indent=2)
     return merged, added, cfg
 
@@ -51,6 +63,7 @@ def reanalyze_seed(seed_dir: Path) -> tuple:
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("roots", nargs="*", default=[str(ROOT / "results_wf2")])
+    ap.add_argument("--note", default="results_wf2/reanalysis.json", help="where to write the provenance note")
     args = ap.parse_args()
     code = _git_info()                    # before any metrics.json is rewritten
     n_runs, added_all = 0, set()
@@ -73,8 +86,10 @@ def main():
                 analysis_code=code, roots=[str(Path(r)) for r in args.roots], runs=n_runs,
                 added_keys=sorted(added_all),
                 check="every metric already in metrics.json was recomputed and is identical; "
-                      "only the keys listed here were added. checkpoints.npz and meta.json are untouched.")
-    out = ROOT / "results_wf2" / "reanalysis.json"
+                      "only the keys listed here were added ('updated:' = R5-vs-R1 agreement recomputed, now NaN "
+                      "when R5 is constant). checkpoints.npz, permutation.npz and meta.json are untouched.")
+    out = ROOT / args.note
+    out.parent.mkdir(parents=True, exist_ok=True)
     json.dump(note, open(out, "w"), indent=2)
     print(f"{n_runs} runs; added keys: {sorted(added_all)}")
 
