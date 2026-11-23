@@ -1,0 +1,52 @@
+{
+  "config_name": "s4_sea_drift",
+  "config_file": "configs/protocol/s4_sea_drift.json",
+  "variant": "ref",
+  "seed": 3,
+  "model_params": {
+    "max_rules": 5,
+    "tau_merge": 0.62,
+    "safe_threshold": 0.07,
+    "min_firing_for_update": 0.05,
+    "drift_sensitivity": 0.35
+  },
+  "stream": {
+    "family": "sea",
+    "n": 20000,
+    "drift_at": 10000,
+    "drift_width": 0,
+    "variant_before": 0,
+    "variant_after": 2,
+    "label_noise": 0.0,
+    "seed": 3
+  },
+  "n": 20000,
+  "d": 3,
+  "drift_points": [
+    10000
+  ],
+  "drift_widths": [
+    0
+  ],
+  "rule_events_final": {
+    "ev_created": 18952,
+    "ev_pruned": 18947,
+    "ev_newborn_pruned": 18916,
+    "ev_merged": 0
+  },
+  "started_utc": "2026-11-22T12:39:12+00:00",
+  "proc_time_s": 8.00154419860337,
+  "log_time_s": 0.1686530013976153,
+  "git": {
+    "commit": "74b7549b06b70aedb14b730e0d85f99e3ca2abeb",
+    "branch": "bruno/wf2-drift-validity",
+    "uncommitted_changes": false
+  },
+  "versions": {
+    "python": "3.11.9",
+    "numpy": "2.2.6",
+    "scipy": "1.17.1",
+    "matplotlib": "3.11.2",
+    "river": "0.27.0"
+  }
+}

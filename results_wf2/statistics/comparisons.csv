@@ -1,0 +1,8 @@
+comparison,n_pairs,wilcoxon_p,rank_biserial,sign_test_p,holm_p
+s1_gauss_abrupt/ref: R1 vs R4,10,0.001953125,-1.0,0.001953125,0.013671875
+s1_gauss_abrupt/open: R1 vs R4,10,0.001953125,-1.0,0.001953125,0.013671875
+s2_gauss_gradual/ref: R1 vs R4,10,0.001953125,-1.0,0.001953125,0.013671875
+s2_gauss_gradual/open: R1 vs R4,10,0.001953125,-1.0,0.001953125,0.013671875
+s1_gauss_abrupt/open: R1 vs accuracy,10,0.001953125,-1.0,0.001953125,0.013671875
+s2_gauss_gradual/open: R1 vs accuracy,10,0.001953125,-1.0,0.001953125,0.013671875
+S1 vs S2: R1 post-drift recovery,10,0.001953125,1.0,0.001953125,0.013671875
