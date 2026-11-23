@@ -10,11 +10,8 @@ counted from the END of the transition (PROTOCOL.md, "Drift ground truth").
 """
 from __future__ import annotations
 import numpy as np
-from .metrics import tau_b, topk_jaccard, topk_precision, auc, first_sustained, is_constant
-from wf2_drift_validity.recovery_metrics import (
-    ranking_recovery,
-    accuracy_recovery,
-)
+from .metrics import tau_b, topk_jaccard, topk_precision, auc, is_constant
+from .recovery import ranking_recovery, accuracy_recovery
 
 NAN = float("nan")
 
@@ -65,47 +62,39 @@ def analyze(arr: dict, truth, drift_points, a: dict, every: int, drift_widths=No
                 out[f"valid/{name}/prec_at_k/seg{s}"] = _nm(prec[m])
                 out[f"valid/{name}/auc/seg{s}"] = _nm(auc_[m])
             for n in range(1, len(dps) + 1):
-                # SQ2: ranking recovery time
+                # SQ2: ranking recovery time, counted from the END of the transition (protocol metric).
+                # t > base: the first sample after the drift is index base, seen at checkpoint t > base.
+                # Censoring: a run that never recovers keeps the time to the last checkpoint of the
+                # segment as a lower bound (recovery_censored), and recovered = 0.
                 base, end = tr_end[n - 1], next_tr[n]
                 idx = np.where((t > base) & (t < end))[0]
+                r = ranking_recovery(t[idx], prec[idx], drift_end=base, threshold=a["recovery_precision"],
+                                     consecutive=a["recovery_consecutive"])
+                out[f"recovery/{name}/drift{n}"] = r["recovery"]
+                out[f"recovered/{name}/drift{n}"] = float(r["recovered"])
+                out[f"recovery_censored/{name}/drift{n}"] = r["censored_time"]
+                # Same quantity counted from the drift point itself (the transition midpoint), so that
+                # abrupt and gradual drifts are timed from the same moment. For a gradual drift the
+                # protocol metric above has a floor of one checkpoint and cannot show a ranking that
+                # re-oriented before the transition ended. Identical to the protocol metric when abrupt.
+                dp = float(dps[n - 1])
+                idx = np.where((t > dp) & (t < end))[0]
+                r = ranking_recovery(t[idx], prec[idx], drift_end=dp, threshold=a["recovery_precision"],
+                                     consecutive=a["recovery_consecutive"])
+                out[f"recovery_from_dp/{name}/drift{n}"] = r["recovery"]
+                out[f"recovery_from_dp_censored/{name}/drift{n}"] = r["censored_time"]
 
-                result = ranking_recovery(
-                    t[idx],
-                    prec[idx],
-                    drift_end=base,
-                    threshold=a["recovery_precision"],
-                    consecutive=a["recovery_consecutive"],
-                )
-
-                out[f"recovery/{name}/drift{n}"] = result["recovery"]
-                out[f"recovered/{name}/drift{n}"] = float(result["recovered"])
-                out[f"recovery_censored/{name}/drift{n}"] = result["censored_time"]
-
-        pre_samples = a.get("acc_pre_samples", 5 * every)
-        acc_consec = a.get("acc_consecutive", 1)
-        trough_samples = a.get("acc_trough_samples")
-
-        for n in range(1, len(dps) + 1):
-            base = tr_end[n - 1]
-            end = next_tr[n]
-            ts = tr_start[n - 1]
-
+        pre_samples = a.get("acc_pre_samples", 5 * every)       # default = first version (5 checkpoints)
+        acc_consec = a.get("acc_consecutive", 1)                 # default = first version (no persistence)
+        trough_samples = a.get("acc_trough_samples")             # default = first version (whole segment)
+        for n in range(1, len(dps) + 1):                         # accuracy recovery (separate from ranking recovery)
+            base, end, ts = tr_end[n - 1], next_tr[n], tr_start[n - 1]
             mask = t < end
-
-            result = accuracy_recovery(
-                t[mask],
-                acc[mask],
-                drift_start=ts,
-                drift_end=base,
-                pre_samples=pre_samples,
-                trough_samples=trough_samples,
-                tolerance=a["acc_tol"],
-                consecutive=acc_consec,
-            )
-
-            out[f"acc/drop/drift{n}"] = result["accuracy_drop"]
-            out[f"acc/recovery/drift{n}"] = result["recovery"]
-            out[f"acc/recovered/drift{n}"] = float(result["recovered"])
-            out[f"acc/recovery_censored/drift{n}"] = result["censored_time"]
+            r = accuracy_recovery(t[mask], acc[mask], drift_start=ts, drift_end=base, pre_samples=pre_samples,
+                                  trough_samples=trough_samples, tolerance=a["acc_tol"], consecutive=acc_consec)
+            out[f"acc/drop/drift{n}"] = r["accuracy_drop"]
+            out[f"acc/recovery/drift{n}"] = r["recovery"]
+            out[f"acc/recovered/drift{n}"] = float(r["recovered"])
+            out[f"acc/recovery_censored/drift{n}"] = r["censored_time"]
 
     return out
