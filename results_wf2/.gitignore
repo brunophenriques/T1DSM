@@ -1,0 +1,4 @@
+# Large per-run files that run_relevance.py regenerates exactly. Keep metrics.json, meta.json,
+# summary.json and checkpoints.npz (the numbers every analysis reads). Files tracked before this rule stay tracked.
+per_rule.csv
+checkpoints.csv

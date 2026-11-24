@@ -1,0 +1,64 @@
+{
+  "config_name": "s1_window_study",
+  "config_file": "configs/wf2/s1_window_study.json",
+  "variant": "w1000",
+  "seed": 1,
+  "model_params": {
+    "max_rules": 5,
+    "tau_merge": 0.62,
+    "safe_threshold": 0.07,
+    "min_firing_for_update": 0.05,
+    "drift_sensitivity": 0.35,
+    "buffer_size_separability": 1000
+  },
+  "stream": {
+    "family": "gauss_shift",
+    "n": 20000,
+    "d": 10,
+    "drift_at": 10000,
+    "drift_width": 0,
+    "rel_before": [
+      0,
+      1,
+      2
+    ],
+    "rel_after": [
+      5,
+      6,
+      7
+    ],
+    "delta": 0.3,
+    "sd": 0.12,
+    "label_noise": 0.0,
+    "seed": 1
+  },
+  "n": 20000,
+  "d": 10,
+  "drift_points": [
+    10000
+  ],
+  "drift_widths": [
+    0
+  ],
+  "rule_events_final": {
+    "ev_created": 19727,
+    "ev_pruned": 19722,
+    "ev_newborn_pruned": 19717,
+    "ev_merged": 0
+  },
+  "started_utc": "2026-11-23T18:20:04+00:00",
+  "proc_time_s": 7.196185499933563,
+  "log_time_s": 0.11811270006637642,
+  "git": {
+    "commit": "7580c229a93fbc5b129c71241f3c2c62b6418f0d",
+    "branch": "fix/wf2-pr5-review",
+    "uncommitted_changes": false
+  },
+  "versions": {
+    "python": "3.12.10",
+    "numpy": "2.4.2",
+    "scipy": "1.17.1",
+    "matplotlib": "3.10.7",
+    "river": "0.27.0"
+  }
+}

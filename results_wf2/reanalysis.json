@@ -1,0 +1,21 @@
+{
+  "date_utc": "2026-11-23T18:21:57+00:00",
+  "analysis_code": {
+    "commit": "33ae584ead697b76eb218e0aaee9cf75f35e37a2",
+    "branch": "fix/wf2-pr5-review",
+    "uncommitted_changes": false
+  },
+  "roots": [
+    "results_wf2\\s1_gauss_abrupt",
+    "results_wf2\\s2_gauss_gradual",
+    "results_wf2\\s4_sea_drift"
+  ],
+  "runs": 60,
+  "added_keys": [
+    "recovery_from_dp/A/drift1",
+    "recovery_from_dp/G/drift1",
+    "recovery_from_dp_censored/A/drift1",
+    "recovery_from_dp_censored/G/drift1"
+  ],
+  "check": "every metric already in metrics.json was recomputed and is identical; only the keys listed here were added. checkpoints.npz and meta.json are untouched."
+}
