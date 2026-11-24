@@ -65,8 +65,8 @@ Facts that the protocol depends on. Line numbers refer to the unmodified baselin
 | Id | Name | Definition | Where | Priority |
 |---|---|---|---|---|
 | R1 | Global window | `model.current_feature_weights` (copy, read-only) | `relevance/extract.py` (`G`) | Must, done |
-| R2 | Recursive feature distances | Per-class running mean/variance with forgetting λ ∈ {0.99, 0.995, 1.0}; per feature, between-class distance ÷ within-class spread, mapped to [0, 1]; updated only after the prediction | WF3 | Should |
-| R3 | Local per rule | R1's formula on a 200-point window of the samples each rule wins (highest activation); NaN if < 20 points or one class; coverage logged | WF3 | Must |
+| R2 | Recursive feature distances | Per-class running mean/variance with forgetting λ ∈ {0.99, 0.995, 1.0}; per feature, between-class distance ÷ within-class spread, mapped to [0, 1]; updated only after the prediction | `wf3_relevance/collect.py` | Should |
+| R3 | Local per rule | R1's formula on a 200-point window of the samples each rule wins (highest activation); NaN if < 20 points or one class; coverage logged | `wf3_relevance/collect.py` | Must |
 | R4 | Effective (rule base) | Support-weighted mean of `rule.w` = what prediction uses | `relevance/extract.py` (`A`) | Must, done |
 | R5 | Permutation importance | Accuracy drop when one feature is permuted on the last 200 seen samples, every 500 samples, prediction only, separate RNG, 5 repeats | WF2 | Could |
 
@@ -74,6 +74,8 @@ Facts that the protocol depends on. Line numbers refer to the unmodified baselin
 
 - A checkpoint is taken right after `partial_fit` whenever `t + 1 = K` is a multiple of **50**, which is
   when the model refreshes R1. Checkpoints in between would only repeat values.
+- **WF3:** analysis skips the first 500 samples. H3 matches a rule to itself at lag 200 in stream time.
+  H6 compares R1, R4 and the mean of valid R3 vectors weighted by their window sizes.
 - **Clean checkpoints:** the R1 buffer (200 samples) must contain data from one concept only. This means
   at least `warmup_flush = 200` samples after the start of the segment, and no sample from a gradual
   transition. Stability and validity use clean checkpoints only.

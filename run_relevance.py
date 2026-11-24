@@ -27,7 +27,7 @@ from relevance.analysis import analyze
 from relevance.metrics import macro_f1, macro_f1_from_counts
 
 
-def run_one(cfg, seed, log=True, stream=None, model_cfg=None):
+def run_one(cfg, seed, log=True, stream=None, model_cfg=None, wf3=False):
     """One prequential run. `model_cfg` overrides cfg["model"] (used for config variants)."""
     st = stream if stream is not None else build_stream(cfg["stream"], seed)
     X, y = st.X, st.y
@@ -40,6 +40,10 @@ def run_one(cfg, seed, log=True, stream=None, model_cfg=None):
     model = EvolvingNeuroFuzzyUnimSafe(n_features=d, n_classes=C, **params)
     logger = RelevanceLogger(d, st.feature_names) if log else None
     events = RuleEventCounter(model) if (log and cfg.get("count_rule_events", True)) else None
+    collector = None
+    if wf3:
+        from wf3_relevance.collect import RelevanceCollector
+        collector = RelevanceCollector(model, st.feature_names, logger.tracker if logger else None)
     y_pred = np.zeros(n, int); correct = np.zeros(n); n_rules = np.zeros(n, int)
     tp, fp, fn = np.zeros(C), np.zeros(C), np.zeros(C)
     t_log = 0.0
@@ -52,6 +56,9 @@ def run_one(cfg, seed, log=True, stream=None, model_cfg=None):
             tp[yt] += 1
         else:
             fp[y_hat] += 1; fn[yt] += 1
+        if collector is not None:
+            # The label is now safe to use. R3 must choose a winner before fit changes the rules.
+            collector.observe_prediction(x_t[0], yt, t)
         model.partial_fit(x_t, np.array([yt]))                                     # then learn
         n_rules[t] = model.n_rules_
         if log:
@@ -65,11 +72,14 @@ def run_one(cfg, seed, log=True, stream=None, model_cfg=None):
                                   f1_win=macro_f1(y[lo:t + 1], y_pred[lo:t + 1], C),
                                   events=events.counts() if events else None)
             t_log += time.perf_counter() - t0
+        if collector is not None:
+            collector.after_fit(t, (t + 1) % every == 0)
     total = time.perf_counter() - t_start
+    wf3_time = collector.elapsed if collector is not None else 0.0
     return dict(stream=st, model=model, logger=logger, y_pred=y_pred, n_rules=n_rules, y=y,
                 acc_final=float(correct.mean()), f1_final=macro_f1_from_counts(tp, fp, fn),
                 events=events.counts() if events else None,
-                proc_time_s=total - t_log, log_time_s=t_log)
+                proc_time_s=total - t_log - wf3_time, log_time_s=t_log, wf3=collector)
 
 
 def plot_run(arr, st, outpath, every):
@@ -133,10 +143,10 @@ def _versions():
     return v
 
 
-def run_config(cfg, seeds=None, variants=None, plot=False, outdir=None, config_file=None, quiet=False):
+def run_config(cfg, seeds=None, variants=None, plot=False, outdir=None, config_file=None, quiet=False, wf3=False):
     """Run every (variant, seed) of a config, save per-seed files and a per-variant summary.json."""
     seeds = list(seeds) if seeds else list(cfg["seeds"])
-    root = Path(outdir or cfg["outdir"]) / cfg["name"]
+    root = Path(outdir or ("results_wf3" if wf3 else cfg["outdir"])) / cfg["name"]
     if "variants" in cfg:
         names = list(variants) if variants else list(cfg["variants"])
         todo = [(v, cfg["variants"][v]) for v in names]
@@ -149,7 +159,7 @@ def run_config(cfg, seeds=None, variants=None, plot=False, outdir=None, config_f
         per_seed = []
         for s in seeds:
             started = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
-            res = run_one(cfg, s, log=True, model_cfg=mparams)
+            res = run_one(cfg, s, log=True, model_cfg=mparams, wf3=wf3)
             st, lg = res["stream"], res["logger"]
             arr = lg.arrays()
             m = analyze(arr, st.truth, st.drift_points, cfg["analysis"], cfg["checkpoint_every"], st.drift_widths)
@@ -157,6 +167,10 @@ def run_config(cfg, seeds=None, variants=None, plot=False, outdir=None, config_f
                      proc_time_s=res["proc_time_s"], log_time_s=res["log_time_s"])
             d = vroot / f"seed_{s}"
             lg.save(str(d))
+            if wf3:
+                collector = res["wf3"]
+                collector.save(d)
+                m["wf3_ms_per_sample"] = 1000 * collector.elapsed / len(st.y)
             json.dump(m, open(d / "metrics.json", "w"), indent=2)
             json.dump(dict(config_name=cfg["name"], config_file=config_file, variant=vname, seed=s,
                            model_params=mparams, stream=st.meta, n=int(len(st.y)), d=int(st.X.shape[1]),
@@ -191,10 +205,11 @@ def main():
     ap.add_argument("--variants", nargs="*", help="subset of the config's variants (default: all)")
     ap.add_argument("--outdir", help="override the config's outdir (e.g. one folder per workflow)")
     ap.add_argument("--plot", action="store_true")
+    ap.add_argument("--wf3", action="store_true", help="collect Workflow 3 relevance and timing")
     args = ap.parse_args()
     cfg = json.load(open(args.config))
     run_config(cfg, seeds=args.seeds, variants=args.variants, plot=args.plot,
-               outdir=args.outdir, config_file=args.config)
+               outdir=args.outdir, config_file=args.config, wf3=args.wf3)
 
 
 if __name__ == "__main__":
