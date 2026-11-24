@@ -1,0 +1,94 @@
+{
+  "metric": "R1 ranking recovery on S1 (samples after the drift)",
+  "values": [
+    150.0,
+    150.0,
+    150.0,
+    150.0,
+    150.0,
+    150.0,
+    150.0,
+    150.0,
+    150.0,
+    100.0
+  ],
+  "identical_for_ref_and_open": true,
+  "recovered": 10,
+  "n": 10,
+  "mean": 145.0,
+  "sd": 15.811388300841896,
+  "median": 150.0,
+  "ci_low": 135.0,
+  "ci_high": 150.0,
+  "h2_interval": [
+    100,
+    250
+  ],
+  "ci_inside_h2_interval": true,
+  "window_study": {
+    "rows": [
+      {
+        "window": 50,
+        "n": 10,
+        "mean": 50.0,
+        "sd": 0.0,
+        "median": 50.0,
+        "ci_low": 50.0,
+        "ci_high": 50.0,
+        "recovered": 10,
+        "censored_pct": 0.0
+      },
+      {
+        "window": 100,
+        "n": 10,
+        "mean": 90.0,
+        "sd": 21.081851067789195,
+        "median": 100.0,
+        "ci_low": 75.0,
+        "ci_high": 100.0,
+        "recovered": 10,
+        "censored_pct": 0.0
+      },
+      {
+        "window": 200,
+        "n": 10,
+        "mean": 145.0,
+        "sd": 15.811388300841896,
+        "median": 150.0,
+        "ci_low": 135.0,
+        "ci_high": 150.0,
+        "recovered": 10,
+        "censored_pct": 0.0
+      },
+      {
+        "window": 500,
+        "n": 10,
+        "mean": 295.0,
+        "sd": 15.811388300841896,
+        "median": 300.0,
+        "ci_low": 285.0,
+        "ci_high": 300.0,
+        "recovered": 10,
+        "censored_pct": 0.0
+      },
+      {
+        "window": 1000,
+        "n": 10,
+        "mean": 545.0,
+        "sd": 15.811388300841896,
+        "median": 550.0,
+        "ci_low": 535.0,
+        "ci_high": 550.0,
+        "recovered": 10,
+        "censored_pct": 0.0
+      }
+    ],
+    "trend": {
+      "test": "Page's trend test, seeds as blocks, windows ordered 50 < 100 < 200 < 500 < 1000",
+      "L": 549.0,
+      "p": 6.621728898483674e-20,
+      "method": "exact",
+      "per_seed_monotone": 10
+    }
+  }
+}

@@ -100,7 +100,8 @@ Facts that the protocol depends on. Line numbers refer to the unmodified baselin
 - *Structural:* rule count, rule creations / prunings / newborn prunings / merges (`RuleEventCounter`).
 - *Resources:* processing time per sample, logging overhead, peak memory (WF4, tracemalloc).
 
-`k` = number of truly relevant features (3 on S1/S2/S3/S1u/S3u, 2 on S4) and 3 on Elec2.
+`k` = number of truly relevant features (3 on S1/S2/S3/S1u/S3u/S6, 2 on S4) and 3 on Elec2. On S5 the two
+concepts have relevant sets of different sizes, so k is the size of the active concept's set (`topk: "truth"`).
 Top-k precision is tie-aware: ties at the k-th place count at their expected value, so uniform weights score
 chance, never 1.
 
@@ -118,8 +119,9 @@ bounds (no data-dependent scaling), ground-truth relevance mask per time step. C
 | S3 | `s3_gauss_stationary` | S1's first concept only | {0,1,2} | predictive (δ = 0.3) |
 | S3u | `s3u_uniform_stationary` | S1u's first concept only (= configs/stationary_control.json) | {0,1,2} | relevance-only |
 | S4 | `s4_sea_drift` | SEA, x ∈ U[0,10]³ (divided by 10), y = 1[x0 + x1 > θ], θ 8 → 7 at 10,000 | {0,1} throughout (negative control) | relevance-only |
-| S5 | WF2 | Agrawal pair, chosen by the rule below | from the generator | WF2 |
-| S6 | WF2 | S1 plus x10 = x0 + small noise (non-causal copy) | {0,1,2} → {5,6,7}; x10 never | WF2 |
+| S5 | `s5_agrawal_pair` | river Agrawal (balance_classes off, no perturbation), fixed generator bounds; labelling function F0 → F6 at 10,000, abrupt (chosen by the rule below) | {age} → {salary, commission, loan} | relevance-only (Agrawal pilot: `open` margin over the majority class 0.0 pp on F0, -0.9 pp on F2, +2.7 pp on F6; threshold +5 pp; `results_wf2/pilot_agrawal.json`) |
+| S5-F0 | `s5f0_agrawal_f0` | Agrawal F0 alone, stationary: the documented failure case | {age} | relevance-only |
+| S6 | `s6_gauss_copy` | S1 plus x10 = clip(x0 + N(0, 0.02), 0, 1), a non-causal copy with its own random generator (S1's columns and labels unchanged) | {0,1,2} → {5,6,7}; x10 never | predictive (δ = 0.3) |
 | E | `elec2` | river Elec2, first 10,000 samples in real order, `date` dropped, expanding min-max | unknown | descriptive (SQ1) |
 | E-sh | `elec2_shuffled` | E shuffled (seed = permutation) | unknown | noise floor for E |
 
@@ -127,6 +129,18 @@ bounds (no data-dependent scaling), ground-truth relevance mask per time step. C
 stationary samples per function). Choose the two functions whose relevant sets (from the generator code) are
 detected with top-k precision 1 and are disjoint; ties go to the lowest function index. Function 0 is
 reported as a documented failure case: age matters in a non-monotone way that a class-mean ratio cannot see.
+
+**Outcome (23 Nov, [results_wf2/oracle/](results_wf2/oracle)):** seed 99, 100,000 samples per concept.
+- Detected with top-k precision 1: F0, F2, F4, F6, F7 (and both halves of S1, both SEA concepts). Not
+  detected: F1, F3, F5, F8, F9.
+- Valid disjoint pairs: (F0, F6), (F0, F7), (F2, F6). The rule (lowest index) selects **F0 → F6**.
+- F0 was expected to be invisible, but river draws age as an integer from 20 to 80, so the class means
+  differ by 0.74 years and the statistic ranks age first on 100,000 samples. On 200-sample windows age is
+  ranked first only 40% of the time: F0 fails through the second failure mode (§12, a noisy 200-sample
+  estimate), not the first.
+- Because the protocol also called F0 the failure case, F2 → F6 (the lowest valid pair without F0) is run
+  as a labelled sensitivity analysis (`configs/wf2/s5b_agrawal_f2_f6.json`). Which pair is reported as S5
+  is a team decision (§14).
 
 ## 7. Learnability rule and pilot outcome
 
@@ -185,6 +199,10 @@ Ablations are wrappers around the unmodified model. The baseline files are never
   used only as an overlay in descriptive plots. No recovery claims on Elec2.
 - **Ranking recovery:** first checkpoint after the drift (or transition end) where top-k precision vs the
   new truth = 1 for **3 checkpoints in a row**.
+  - Timed from the transition end, a gradual drift has a floor of one checkpoint (50 samples) and cannot
+    show a ranking that re-oriented during the transition. Abrupt and gradual drifts are therefore
+    compared with `recovery_from_dp/*`: the same rule, timed from the drift point (the transition
+    midpoint). For an abrupt drift the two are identical. (§14, 23 Nov.)
 - **Accuracy recovery** (predictive streams only):
   - Pre-drift level = mean 500-window accuracy over the last 1,000 samples before the drift (or
     transition start).
@@ -242,7 +260,10 @@ To be stated in the report. These results are **exploratory**; confirmatory resu
 
 | Date | Section | Change | Reason | Approved by |
 |---|---|---|---|---|
-| | | | | |
+| 23 Nov (pre-freeze) | §10 | Added `recovery_from_dp/*` (recovery timed from the drift point) for comparing abrupt and gradual drift; the protocol metric is still reported. | On S2 the protocol metric was 50 in every seed: a one-checkpoint floor, because R1 re-oriented before the transition ended. Found in the PR #5 review. | pending |
+| 23 Nov (pre-freeze) | §13, §15 | Ran the window-size part of H2 on S1 (`configs/wf2/s1_window_study.json`, windows 50–1,000, `ref` settings, seeds 0–9). | H2's second part had only been run on the uniform stream (exploratory). | pending |
+| 23 Nov (pre-freeze) | §6 | S5 = Agrawal F0 → F6 by the frozen rule; F2 → F6 run as a sensitivity analysis. | The oracle check detected F0 (see §6 Outcome), which the protocol had expected to be invisible; the rule and the F0 statement then conflict. Team to decide which pair is reported. | pending |
+| 23 Nov (pre-freeze) | §5, §6 | S5 uses k = size of the active concept's relevant set; S6's "small noise" fixed at sd 0.02 (a sixth of the feature sd); oracle check on seed 99. | Values the protocol left open, fixed before the S5/S6 runs. | pending |
 
 ## 15. Workflows, priorities and report
 

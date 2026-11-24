@@ -1,29 +1,36 @@
-# WF2 — Drift Sensitivity Findings
+# WF2 — Drift Sensitivity Findings (SQ2)
 
-Author: Bruno Henriques
+Author: Bruno Henriques. Revised by Luis Soeiro (23 Nov 2026) after the PR #5 review; the changes
+are listed in [Revision notes](#revision-notes).
 Research question: SQ2 — How quickly does feature relevance recover after drift?
+
+All results here are **exploratory** until the team tags `protocol-freeze` (PROTOCOL.md §13).
 
 ## 1. Implementation
 
-- Implemented ranking recovery and accuracy recovery.
+- Ranking recovery and accuracy recovery, with right-censoring for runs that never recover
+  (`relevance/recovery.py`; `wf2_drift_validity/recovery_metrics.py` re-exports it).
 - Recovery requires three consecutive qualifying checkpoints.
-- Implemented right-censoring for runs that never recover.
-- All 8 unit tests passed.
-- Regression, non-intrusive and no-leakage tests passed.
+- `recovery_from_dp/*`: the same ranking recovery timed from the drift point instead of the end of
+  the transition, so that abrupt and gradual drifts are compared from the same moment.
+- Unit tests on step curves, including runs that never recover, NaN values, empty segments and a
+  gradual drift (`tests/test_recovery_metrics.py`, runnable as a script or with pytest).
+- The new metrics were added to the saved runs with `python -m wf2_drift_validity.reanalyze`, which
+  recomputes every metric from `checkpoints.npz` and stops if any existing value would change
+  (`results_wf2/reanalysis.json`).
 
 ## 2. ADWIN — Elec2
 
-Configuration:
-- Samples: 10,000
-- Variant: ref
-- Delta: 0.002
-- Accuracy: 58.86%
+Configuration: 10,000 samples, variant `ref`, δ = 0.002. Accuracy 58.86%.
 
-Detected change points:
-1152, 1664, 2304, 2944, 3616, 4512, 5536, 6528.
+Detected change points: 1152, 1664, 2304, 2944, 3616, 4512, 5536, 6528.
 
-These detections are descriptive and do not represent
-ground-truth concept drift.
+- These are descriptive only and are not ground-truth drift.
+- river's ADWIN checks for change every 32 samples (`clock=32`), so every value is a multiple of 32:
+  they are **detection times**, not estimates of when the change happened.
+- `ref` predicts at chance on the synthetic streams (PROTOCOL.md §7). On Elec2 its accuracy has not
+  been compared with the majority-class rate yet (WF4), so the detections may partly reflect changes
+  in the class balance rather than in the concept.
 
 ## 3. S1 — Preliminary Experiment (Seed 0)
 
@@ -31,255 +38,193 @@ ground-truth concept drift.
 |---|---:|---:|
 | R1 ranking recovery | 150 | 150 |
 | R4 ranking recovery | Not recovered | Not recovered |
-| Accuracy recovery | 950 | Not recovered |
+| Accuracy recovery | not interpretable (chance level) | Not recovered |
 | Final accuracy | 0.4959 | 0.5705 |
 | R1 post-drift Precision@3 | 1.00 | 1.00 |
 | R4 post-drift Precision@3 | 0.30 | 0.00 |
 | Final rule count | 5 | 106 |
 
-### Preliminary findings
+## 4. S1 — Abrupt drift (10 seeds)
 
-- Global relevance recovered within the predicted
-  interval of 100–250 samples, consistent with H2.
-- Effective rule weights failed to recover after drift.
-- Removing the rule cap improved predictive accuracy
-  but did not guarantee accuracy recovery.
-- Feature relevance recovery does not necessarily
-  imply predictive performance recovery.
-
-These observations are preliminary and based on one seed.
-
-## 4. S1 — Full Experiment (10 seeds)
-
-Abrupt Gaussian feature-relevance drift at sample 10,000.
-Both ref and open configurations were evaluated using seeds 0–9.
+Abrupt Gaussian feature-relevance drift at sample 10,000; seeds 0–9; `ref` and `open`.
+Mean ± SD use the sample SD (ddof = 1). Recovery values include censored runs at their censoring
+time, with the recovered count next to them.
 
 | Metric | Ref | Open |
 |---|---:|---:|
-| R1 recovery time | 145 ± 15 | 145 ± 15 |
-| R1 recovered runs | 10/10 | 10/10 |
-| R4 recovered runs | 0/10 | 0/10 |
-| Accuracy recovery | 845 ± 799.52 | 9300 ± 324.04 |
-| Accuracy recovered runs | 10/10 | 3/10 |
-| Accuracy censored runs | 0/10 | 7/10 |
-| Final accuracy | 0.5043 ± 0.0057 | 0.5819 ± 0.0080 |
+| R1 recovery time | 145 ± 15.8 (10/10 recovered) | 145 ± 15.8 (10/10) |
+| R4 recovery | 0/10 recovered (censored at 10,000) | 0/10 recovered |
+| Accuracy recovery | N/A: `ref` predicts at chance | 3/10 recovered, 7/10 censored; median 10,000 |
+| Accuracy drop after the drift | — | 0.127 ± 0.025 |
+| Final accuracy | 0.504 ± 0.006 | 0.582 ± 0.008 |
 | R1 post-drift Precision@3 | 1.00 | 1.00 |
 | R4 post-drift Precision@3 | 0.18 | 0.00 |
-| Final rule count | 5 | 97.7 ± 7.59 |
-
-Reported standard deviations use ddof=0.
-Accuracy recovery means include recovered runs only.
+| Final rule count | 5 | 97.7 ± 8.0 |
 
 ### Findings
 
-- R1 recovered within the predicted interval of 100–250
-  samples, supporting H2.
-- Neither configuration achieved R4 ranking recovery.
-- Global feature relevance recovery was independent of
-  the rule cap in this experiment.
-- The open configuration achieved higher final accuracy
-  but exhibited slower and less frequent accuracy recovery.
-- Stable rankings do not necessarily imply valid rankings.
-- Feature relevance recovery and predictive recovery
-  represent distinct adaptation mechanisms.
+- R1 recovered within the predicted interval of 100–250 samples in every seed.
+- R1 is the same for `ref` and `open`: it depends only on the data and the window.
+- R4 never recovered. In `ref` the rule weights are frozen; in `open` the rules created before the
+  drift keep the old weights and outweigh the newer ones, so R4 never ranks the new features in its
+  top 3 (Precision@3 = 0.00 after the drift).
+- `open`'s accuracy does **not** return to its pre-drift level. Before the drift it is about 0.62
+  (0.60–0.67 by seed); over the last 2,000 samples it is about 0.57 (0.56–0.59). The three runs
+  counted as recovered (at 8,850, 9,450 and 9,600 samples) only crossed the threshold
+  (pre-drift − 0.02) briefly near the end of the stream.
+- R4 is a case of a ranking that is stable but not valid: after the drift its top-3 set does not
+  change, yet none of the new features is in it.
 
-### Limitations
+## 5. S2 — Gradual drift (10 seeds)
 
-The ref configuration remains near chance-level accuracy.
-Its faster accuracy recovery should therefore not be
-interpreted as superior predictive adaptation.
-
-## 5. S2 — Gradual Drift (10 seeds)
-
-Gradual Gaussian feature-relevance drift with a transition
-between samples 9,500 and 10,500.
-
-Recovery is measured from the end of the transition.
+Gradual Gaussian feature-relevance drift with a transition from 9,500 to 10,500.
 
 | Metric | Ref | Open |
 |---|---:|---:|
-| R1 recovery time | 50 ± 0 | 50 ± 0 |
-| R1 recovered runs | 10/10 | 10/10 |
-| R4 recovered runs | 0/10 | 0/10 |
-| Accuracy recovery | 1215 ± 841.15 | 7683.33 ± 1033.87 |
-| Accuracy recovered runs | 10/10 | 3/10 |
-| Accuracy censored runs | 0/10 | 7/10 |
-| Final accuracy | 0.5044 ± 0.0058 | 0.5781 ± 0.0073 |
-| R1 post-drift Precision@3 | 1.00 | 1.00 |
-| R4 post-drift Precision@3 | 0.18 | 0.00 |
-| Final rule count | 5 | 93.4 ± 12.48 |
+| R1 recovery, protocol (from the transition end, 10,500) | 50 ± 0 (10/10 at the floor) | 50 ± 0 |
+| R1 recovery from the drift point (10,000) | 190 ± 31.6 (10/10) | 190 ± 31.6 |
+| R4 recovery | 0/10 recovered | 0/10 recovered |
+| Accuracy recovery | N/A: chance level | 3/10 recovered, 7/10 censored; median 9,500 |
+| Final accuracy | 0.504 ± 0.006 | 0.578 ± 0.008 |
+| Final rule count | 5 | 93.4 ± 13.2 |
 
 ### Findings
 
-- Global relevance recovered at the first eligible
-  checkpoint after the gradual transition in all seeds.
-- Post-transition recovery was shorter than in S1
-  (50 versus 145 samples).
-- Adaptation may already occur during the gradual
-  transition, limiting direct comparisons of total
-  adaptation time with abrupt drift.
-- Effective rule weights failed to recover in both
-  configurations.
-- Predictive recovery remained substantially slower
-  than global relevance recovery in the open variant.
+- The protocol value (50 in every seed) is a **floor**: 50 is the first checkpoint after the
+  transition ends, and R1 had already re-oriented before that. It shows that R1 is correct once the
+  transition is over, but it cannot measure speed.
+- Timed from the drift point, as for S1, R1 needs about 190 samples on S2 against 145 on S1:
+  gradual drift is **slower** (see §7). In a gradual drift the 200-sample window fills with
+  new-concept samples more slowly, because the samples only gradually come from the new concept.
+- Measured from the start of the transition (9,500), R1 needs about 690 samples.
+- As on S1, R4 never recovers and `open`'s accuracy does not return to its pre-drift level.
 
-Accuracy recovery means include recovered runs only.
+## 6. S4 — Negative control (10 seeds)
 
-## 6. S4 — Negative Control (10 seeds)
-
-SEA threshold drift at sample 10,000.
-The relevant feature set remains {x0, x1} throughout
-the stream.
+SEA threshold drift at sample 10,000. The relevant set stays {x0, x1}.
 
 | Metric | Ref | Open |
 |---|---:|---:|
 | R1 pre-drift Precision@2 | 1.00 | 1.00 |
 | R1 post-drift Precision@2 | 1.00 | 1.00 |
-| R4 pre-drift Precision@2 | 0.7667 | 1.00 |
-| R4 post-drift Precision@2 | 0.7667 | 1.00 |
+| R4 pre-drift Precision@2 | 0.767 | 1.00 |
+| R4 post-drift Precision@2 | 0.767 | 1.00 |
 | R1 Jaccard (lag 200) | 1.00 | 1.00 |
-| Final accuracy | 0.7176 ± 0.0026 | 0.7176 ± 0.0026 |
-| Macro-F1 | 0.4182 | 0.4182 |
-| Final rule count | 5 | 147.1 ± 13.59 |
+| Final accuracy | 0.718 ± 0.003 | 0.718 ± 0.003 |
+| Macro-F1 | 0.418 | 0.418 |
+| Final rule count | 5 | 147.1 ± 14.3 |
 
 ### Findings
 
-- Global relevance correctly identified the relevant
-  features before and after the threshold drift.
-- R4 remained valid in the open configuration, unlike
-  in S1 and S2, where the relevant feature set changed.
-- Removing the rule cap substantially increased the
-  number of rules without improving predictive accuracy.
-- The low macro-F1 highlights the limitations of
-  accuracy on this imbalanced stream.
+- R1 identified the relevant features before and after the threshold drift.
+- R4 stayed valid in `open`, unlike on S1 and S2, where the relevant set changes.
+- **Both variants almost always predict the majority class**: predicting only the majority class
+  gives macro-F1 ≈ 0.42 at this class balance, which is what both reach. S4 is relevance-only
+  (learnability pilot), so no accuracy claims are made on it.
+- Ranking recovery on S4 is trivial (the relevant set does not change) and is not interpreted. The
+  pre-drift versus final window comparison is WF5's.
 
-### Limitations
+## 7. Statistics
 
-S4 is a relevance-only negative control.
-Ranking recovery time is not interpreted because
-the ground-truth relevant feature set does not change.
+10 paired seeds; Wilcoxon signed-rank (zero differences dropped), matched-pairs rank-biserial
+correlation and a sign test; Holm correction within each family; bootstrap CIs with 10,000
+resamples. Output in `results_wf2/statistics/`.
 
-The direct pre-drift versus final window comparison
-will be performed in WF5.
+### Primary SQ2 result (H2, first part)
 
-## 7. Statistical Analysis
+R1 ranking recovery on S1: **145 ± 15.8 samples, 95% CI [135, 150], 10/10 recovered.**
+The CI lies inside the predicted 100–250 samples.
 
-Statistical analysis was performed on 10 paired seeds
-using the Wilcoxon signed-rank test, matched-pairs
-rank-biserial correlation and a sign test.
+### Window size (H2, second part)
 
-Holm correction was applied across seven comparisons.
-Bootstrap confidence intervals used 10,000 resamples.
+R1 ranking recovery on S1 for different R1 window sizes (`configs/wf2/s1_window_study.json`; the
+window is the model's `buffer_size_separability`, 200 in the baseline):
 
-### Primary SQ2 result
+| Window | 50 | 100 | 200 | 500 | 1,000 |
+|---|---:|---:|---:|---:|---:|
+| Recovery (mean ± SD) | 50 ± 0 | 90 ± 21.1 | 145 ± 15.8 | 295 ± 15.8 | 545 ± 15.8 |
+| Recovered | 10/10 | 10/10 | 10/10 | 10/10 | 10/10 |
 
-S1 global relevance recovery:
-
-- Mean: 145 samples
-- Standard deviation: 15 samples
-- 95% bootstrap CI: [135, 150]
-- Recovery rate: 100%
-
-This supports the predicted recovery interval of
-100–250 samples (H2).
+Recovery grows with the window in every seed (10/10 monotone; Page's trend test p = 6.6 × 10⁻²⁰).
+The medians are 50 / 100 / 150 / 300 / 550: half the window plus one refresh interval (50 samples).
+The new features win as soon as about half of the window holds new data, and R1 is only recomputed
+every 50 samples. This is the mechanism the H2 prediction was derived from. At window 50 the value is
+the one-checkpoint floor.
 
 ### Paired comparisons
 
-| Comparison | Wilcoxon p | Holm p | Effect size |
-|---|---:|---:|---:|
-| S1 ref: R1 vs R4 | 0.001953 | 0.013672 | -1.0 |
-| S1 open: R1 vs R4 | 0.001953 | 0.013672 | -1.0 |
-| S2 ref: R1 vs R4 | 0.001953 | 0.013672 | -1.0 |
-| S2 open: R1 vs R4 | 0.001953 | 0.013672 | -1.0 |
-| S1 open: R1 vs accuracy | 0.001953 | 0.013672 | -1.0 |
-| S2 open: R1 vs accuracy | 0.001953 | 0.013672 | -1.0 |
-| S1 vs S2: R1 recovery | 0.001953 | 0.013672 | +1.0 |
+| Family | Comparison | Wilcoxon p | Holm p | Rank-biserial |
+|---|---|---:|---:|---:|
+| SQ2 | S1 open: R1 vs accuracy recovery | 0.0020 | 0.0059 | −1.0 |
+| SQ2 | S2 open: R1 vs accuracy recovery | 0.0020 | 0.0059 | −1.0 |
+| SQ2 | S1 vs S2: R1 recovery from the drift point | 0.0156 | 0.0156 | −1.0 |
+| H6 (secondary) | S1 ref: R1 vs R4 | 0.0020 | 0.0078 | −1.0 |
+| H6 (secondary) | S1 open: R1 vs R4 | 0.0020 | 0.0078 | −1.0 |
+| H6 (secondary) | S2 ref: R1 vs R4 | 0.0020 | 0.0078 | −1.0 |
+| H6 (secondary) | S2 open: R1 vs R4 | 0.0020 | 0.0078 | −1.0 |
 
-All seven comparisons remained significant after
-Holm correction.
+- The ranking recovers before accuracy in every seed, on both streams.
+- Abrupt drift recovers sooner than gradual drift when both are timed from the drift point (7 seeds
+  differ, all in the same direction; 3 are tied).
+- R1 vs R4 only restates that R1 recovered in 10/10 seeds and R4 in 0/10 (R4's value is the
+  censoring time). These belong to H6 (WF3) and are reported as secondary.
 
-### Interpretation
+### Limitations
 
-- Global relevance recovered consistently faster
-  than effective rule weights.
-- Global relevance recovery preceded predictive
-  recovery in the open configuration.
-- Gradual drift exhibited shorter post-transition
-  recovery than abrupt drift.
-- Sign tests confirmed the consistency of the
-  observed directions across seeds.
-
-### Statistical limitations
-
-Censored observations represent observation limits,
-not actual recovery times.
-
-The S1 versus S2 comparison concerns post-transition
-recovery, not total adaptation time.
-
-Identical R1 results across model variants are expected
-because R1 depends on the stream rather than the rule base.
+- Censored values are lower bounds, not recovery times; recovered counts are always reported.
+- With 10 seeds the smallest two-sided Wilcoxon p is 0.002.
+- Results are exploratory until `protocol-freeze`.
 
 ## 8. Implementation Risks and Mitigation
 
 ### Risk 1 — Misleading recovery measurements
 
-A temporary improvement in feature ranking or accuracy
-may be incorrectly interpreted as successful recovery.
-Unrecovered runs may also bias recovery-time estimates
-if excluded.
+A brief improvement may be read as recovery, unrecovered runs may bias averages, and the time
+origin can create a floor (as on S2).
 
-Mitigation:
-- Require three consecutive qualifying checkpoints.
-- Record right-censored observations.
-- Report recovery rates alongside recovery times.
-- Validate the implementation using controlled
-  step-curve unit tests.
+Mitigation: three consecutive checkpoints; censored values with recovered counts; recovery timed
+from the drift point for abrupt-vs-gradual comparisons; step-curve unit tests.
 
 ### Risk 2 — Confounding relevance and predictive adaptation
 
-Fast global relevance recovery may be incorrectly
-interpreted as successful adaptation of the classifier.
+Fast R1 recovery does not mean the classifier adapted.
 
-Mitigation:
-- Evaluate R1, R4 and predictive recovery separately.
-- Compare ref and open configurations.
-- Monitor rule-base evolution.
-- Restrict predictive recovery claims to predictive
-  streams.
-- Include S4 as a negative control.
+Mitigation: R1, R4 and accuracy evaluated separately; `ref` and `open` compared; rule counts
+monitored; accuracy claims only on predictive streams and only for `open`; S4 as a negative control.
 
-## 9. Final Conclusions
+## 9. Table 1 — SQ2 row
 
-Pending.
-
-## 10. Table 1 — SQ2
-
-| Research question | Primary metric | Result | 95% CI | Recovery rate |
+| Research question | Primary metric | Result | 95% CI | Recovered |
 |---|---|---|---|---|
-| SQ2 — Drift sensitivity | R1 ranking recovery on S1 | 145 ± 15 samples | [135, 150] | 10/10 |
+| SQ2 — Drift sensitivity | R1 ranking recovery on S1 (window 200) | 145 ± 15.8 samples | [135, 150] | 10/10 |
 
+Supporting lines for the report:
+- Window size: 50 / 90 / 145 / 295 / 545 samples for windows 50 / 100 / 200 / 500 / 1,000
+  (monotone in 10/10 seeds).
+- Gradual drift (S2), timed from the drift point: 190 ± 31.6 samples, slower than abrupt
+  (Holm p = 0.016).
 
-## 11. Final Interpretation
+## 10. Final Interpretation
 
-Global feature relevance recovered after abrupt drift
-in 145 ± 15 samples, supporting the predicted recovery
-interval of 100–250 samples.
+- Global relevance (R1) re-orients to the new relevant features within 145 ± 15.8 samples after an
+  abrupt drift, inside the predicted 100–250 samples, and the delay grows with the window size, as
+  H2 predicts.
+- Under gradual drift R1 re-orients before the transition ends, but later than under abrupt drift
+  when both are timed from the drift point (about 190 against 145 samples).
+- The rule weights the model actually uses (R4) never re-orient, in either variant.
+- `open`'s accuracy drops by about 0.13 after the drift and does not return to its pre-drift level
+  within 10,000 samples.
+- Relevance adaptation, rule-weight adaptation and predictive recovery are therefore distinct: a
+  correct R1 does not mean the model adapted.
 
-Under gradual drift, the correct feature ranking was
-achieved at the first checkpoint after the transition.
+## Revision notes
 
-Effective rule weights failed to recover on both S1
-and S2 across all tested seeds.
-
-Predictive recovery in the open configuration was
-substantially slower than global relevance recovery
-(Holm-adjusted p = 0.0137).
-
-The S4 negative control preserved the correct global
-feature ranking despite the change in the
-classification threshold.
-
-These findings demonstrate that relevance adaptation,
-rule-weight adaptation and predictive recovery are
-distinct processes. 
+Changes made after the PR #5 review (Luis Soeiro, 23 Nov 2026):
+1. S2: the protocol value (50) is reported as a floor; abrupt vs gradual is compared from the drift
+   point (new metric `recovery_from_dp/*`). The earlier conclusion that gradual drift recovers
+   faster is withdrawn.
+2. Accuracy recovery: `open` is reported as 3/10 recovered, 7/10 censored (median of the censored
+   values) instead of the mean over the 3 recovered runs (9,300 ± 324); `ref` is N/A.
+3. H2: the window-size part was run on S1 (§7), so both parts of H2 are now tested.
+4. Sample SD (ddof = 1) throughout; Holm within families; R1 vs R4 moved to a secondary H6 family.
+5. S4 majority-class behaviour and ADWIN detection times stated explicitly.

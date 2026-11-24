@@ -1,0 +1,48 @@
+{
+  "metric": "Top-3 precision of R1 in the clean segments of S1 (mean of both halves, per seed)",
+  "expected": 1.0,
+  "values": [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0
+  ],
+  "identical_for_ref_and_open": true,
+  "seeds_eq_1_both_halves": 10,
+  "first_half": {
+    "n": 10,
+    "mean": 1.0,
+    "sd": 0.0,
+    "median": 1.0,
+    "ci_low": 1.0,
+    "ci_high": 1.0
+  },
+  "second_half": {
+    "n": 10,
+    "mean": 1.0,
+    "sd": 0.0,
+    "median": 1.0,
+    "ci_low": 1.0,
+    "ci_high": 1.0
+  },
+  "n": 10,
+  "mean": 1.0,
+  "sd": 0.0,
+  "median": 1.0,
+  "ci_low": 1.0,
+  "ci_high": 1.0,
+  "auc_both_halves": {
+    "n": 10,
+    "mean": 1.0,
+    "sd": 0.0,
+    "median": 1.0,
+    "ci_low": 1.0,
+    "ci_high": 1.0
+  }
+}

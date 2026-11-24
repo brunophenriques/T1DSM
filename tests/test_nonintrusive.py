@@ -5,7 +5,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from run_relevance import run_one
-from relevance.streams import relevance_drift_stream, expanding_minmax
+from relevance.streams import relevance_drift_stream, expanding_minmax, agrawal_drift_stream, agrawal_labels, AGRAWAL_FEATURES
 from relevance.metrics import tau_b, auc, topk_jaccard, first_sustained, topk_precision
 
 CFG = json.load(open(ROOT / "configs" / "mve.json"))
@@ -92,6 +92,29 @@ def test_matches_baseline_loop_if_available():
     print("RAN baseline comparison: identical predictions and rule counts")
 
 
+def test_agrawal_drift_truth_changes_at_drift():
+    st = agrawal_drift_stream(n=1000, drift_at=500, f_before=6, f_after=2, seed=0)
+    assert st.X.shape == (1000, 9) and st.truth.shape == (1000, 9)
+    assert 0.0 <= st.X.min() and st.X.max() <= 1.0
+    assert list(np.where(st.truth[499])[0]) == [0, 1, 8]      # function 6 reads salary, commission, loan
+    assert list(np.where(st.truth[500])[0]) == [2, 3]         # function 2 reads age, elevel
+
+
+def test_agrawal_labels_match_river_if_available():
+    try:
+        from river.datasets import synth
+    except Exception as e:
+        _skip(f"agrawal label check needs river: {e!r}")
+    for f in range(10):
+        rows, ys = [], []
+        for i, (x, y) in enumerate(synth.Agrawal(classification_function=f, seed=7)):
+            if i >= 2000:
+                break
+            rows.append([x[k] for k in AGRAWAL_FEATURES]); ys.append(y)
+        assert np.array_equal(agrawal_labels(f, np.array(rows, dtype=float)), np.array(ys)), f"function {f}"
+    print("RAN agrawal label check: all 10 functions match river")
+
+
 def test_metrics_and_scaling():
     assert abs(tau_b([1, 2, 3, 4], [1, 2, 3, 4]) - 1) < 1e-12
     assert abs(tau_b([1, 2, 3, 4], [4, 3, 2, 1]) + 1) < 1e-12
@@ -103,6 +126,25 @@ def test_metrics_and_scaling():
     assert topk_precision(np.array([9, 8, 7, 1, 1, 1, 1, 1, 1, 1.]), tv, 3) == 1.0
     X = np.array([[0.], [10.], [5.]])
     assert np.allclose(expanding_minmax(X).ravel(), [0.0, 1.0, 0.5])   # row 2 uses only rows 0-2
+
+
+def test_river_scaling_modes_and_causal_prefix():
+    from relevance.streams import stream_from_river, shuffle_control
+    rows = [({"date": t, "day": d, "x": x}, t % 2)
+            for t, (d, x) in enumerate([(1, .2), (7, .8), (4, .4), (2, .1)])]
+    domain = stream_from_river(rows, 4, scaling="domain", bounds={"day": [1, 7]}, drop=["date"])
+    assert domain.feature_names == ["day", "x"]
+    assert np.allclose(domain.X[:, 0], [0, 1, .5, 1 / 6])
+    raw = stream_from_river(rows, 4, scaling="none", drop=["date", "day"])
+    assert np.array_equal(raw.X[:, 0], [.2, .8, .4, .1])
+    full = stream_from_river(rows, 4, drop=["date"])
+    prefix = stream_from_river(rows, 3, drop=["date"])
+    assert np.array_equal(full.X[:3], prefix.X)
+    shuffled = shuffle_control(domain, 7)
+    order = np.random.default_rng(7).permutation(4)
+    assert np.array_equal(shuffled.X, domain.X[order])
+    assert np.array_equal(shuffled.y, domain.y[order])
+    assert shuffled.meta["bounds"] == {"day": [1, 7]}
 
 
 if __name__ == "__main__":

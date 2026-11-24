@@ -1,0 +1,83 @@
+{
+  "rule": "PROTOCOL.md \u00a77 learnability rule (seed 99, open beats majority by >= 5 pp)",
+  "pilot_seed": 99,
+  "n": 20000,
+  "margin": 0.05,
+  "rows": [
+    {
+      "function": 0,
+      "variant": "ref",
+      "acc": 0.67065,
+      "majority": 0.6708,
+      "margin_vs_majority": -0.00014999999999998348,
+      "rules_final": 5,
+      "seconds": 8.2
+    },
+    {
+      "function": 0,
+      "variant": "open",
+      "acc": 0.6707,
+      "majority": 0.6708,
+      "margin_vs_majority": -9.999999999998899e-05,
+      "rules_final": 147,
+      "seconds": 109.9
+    },
+    {
+      "function": 2,
+      "variant": "ref",
+      "acc": 0.5204,
+      "majority": 0.53375,
+      "margin_vs_majority": -0.013349999999999973,
+      "rules_final": 5,
+      "seconds": 8.3
+    },
+    {
+      "function": 2,
+      "variant": "open",
+      "acc": 0.5243,
+      "majority": 0.53375,
+      "margin_vs_majority": -0.009449999999999958,
+      "rules_final": 147,
+      "seconds": 107.6
+    },
+    {
+      "function": 6,
+      "variant": "ref",
+      "acc": 0.4989,
+      "majority": 0.5022,
+      "margin_vs_majority": -0.0032999999999999696,
+      "rules_final": 5,
+      "seconds": 8.3
+    },
+    {
+      "function": 6,
+      "variant": "open",
+      "acc": 0.52885,
+      "majority": 0.5022,
+      "margin_vs_majority": 0.026650000000000063,
+      "rules_final": 147,
+      "seconds": 108.1
+    }
+  ],
+  "function_roles": {
+    "F0": "relevance-only",
+    "F2": "relevance-only",
+    "F6": "relevance-only"
+  },
+  "pair_roles": {
+    "S5 F0->F6": "relevance-only",
+    "S5b F2->F6 (sensitivity)": "relevance-only"
+  },
+  "git": {
+    "commit": "e33600bac7a53fc8c8b0c0a517d2cd301892f123",
+    "branch": "feature/wf2-sq3-validity",
+    "uncommitted_changes": false
+  },
+  "versions": {
+    "python": "3.12.10",
+    "numpy": "2.4.2",
+    "scipy": "1.17.1",
+    "matplotlib": "3.10.7",
+    "river": "0.27.0"
+  }
+}

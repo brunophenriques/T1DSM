@@ -1,0 +1,60 @@
+{
+  "name": "s5b_agrawal_f2_f6",
+  "note": "Sensitivity analysis for S5, NOT the pre-registered pair: F2 -> F6, the lowest-index valid pair without F0. Run because the protocol expected F0 to be undetectable, but the oracle check detected it on 100,000 samples, so the frozen rule selected F0 -> F6. The team decides which pair is reported (PROTOCOL.md \u00a714).",
+  "role": "see results_wf2/pilot_agrawal.json",
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+  ],
+  "stream": {
+    "type": "agrawal",
+    "n": 20000,
+    "function_before": 2,
+    "function_after": 6,
+    "drift_at": 10000,
+    "drift_width": 0
+  },
+  "variants": {
+    "ref": {
+      "max_rules": 5,
+      "tau_merge": 0.62,
+      "safe_threshold": 0.07,
+      "min_firing_for_update": 0.05,
+      "drift_sensitivity": 0.35
+    },
+    "open": {
+      "max_rules": null,
+      "tau_merge": 0.62,
+      "safe_threshold": 0.07,
+      "min_firing_for_update": 0.05,
+      "drift_sensitivity": 0.35
+    }
+  },
+  "checkpoint_every": 50,
+  "acc_window": 500,
+  "analysis": {
+    "lags_samples": [
+      50,
+      200,
+      500,
+      2000
+    ],
+    "topk": "truth",
+    "recovery_precision": 1.0,
+    "recovery_consecutive": 3,
+    "warmup_flush": 200,
+    "acc_tol": 0.02,
+    "acc_pre_samples": 1000,
+    "acc_consecutive": 3,
+    "acc_trough_samples": 1000
+  },
+  "outdir": "results_wf2"
+}

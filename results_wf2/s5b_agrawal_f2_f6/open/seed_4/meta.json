@@ -1,0 +1,64 @@
+{
+  "config_name": "s5b_agrawal_f2_f6",
+  "config_file": "configs/wf2/s5b_agrawal_f2_f6.json",
+  "variant": "open",
+  "seed": 4,
+  "model_params": {
+    "max_rules": null,
+    "tau_merge": 0.62,
+    "safe_threshold": 0.07,
+    "min_firing_for_update": 0.05,
+    "drift_sensitivity": 0.35
+  },
+  "stream": {
+    "family": "agrawal",
+    "n": 20000,
+    "function_before": 2,
+    "function_after": 6,
+    "drift_at": 10000,
+    "drift_width": 0,
+    "rel_before": [
+      "age",
+      "elevel"
+    ],
+    "rel_after": [
+      "salary",
+      "commission",
+      "loan"
+    ],
+    "class1_share": 0.5156,
+    "seed": 4,
+    "river_generator": "Agrawal",
+    "balance_classes": false,
+    "perturbation": 0.0
+  },
+  "n": 20000,
+  "d": 9,
+  "drift_points": [
+    10000
+  ],
+  "drift_widths": [
+    0
+  ],
+  "rule_events_final": {
+    "ev_created": 149,
+    "ev_pruned": 0,
+    "ev_newborn_pruned": 0,
+    "ev_merged": 0
+  },
+  "started_utc": "2026-11-23T18:52:31+00:00",
+  "proc_time_s": 80.92832099998395,
+  "log_time_s": 0.5184301000163032,
+  "git": {
+    "commit": "2e1c92aa6eb1bc029261bb101e17c44ad925ccfe",
+    "branch": "feature/wf2-sq3-validity",
+    "uncommitted_changes": false
+  },
+  "versions": {
+    "python": "3.12.10",
+    "numpy": "2.4.2",
+    "scipy": "1.17.1",
+    "matplotlib": "3.10.7",
+    "river": "0.27.0"
+  }
+}
