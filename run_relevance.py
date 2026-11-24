@@ -25,6 +25,7 @@ from relevance.logger import RelevanceLogger
 from relevance.extract import MODEL_REFRESH, RuleEventCounter
 from relevance.analysis import analyze
 from relevance.metrics import macro_f1, macro_f1_from_counts
+from relevance.permutation import permutation_importance, analyze_permutation, DEFAULT as PERM_DEFAULT
 
 
 def run_one(cfg, seed, log=True, stream=None, model_cfg=None):
@@ -42,7 +43,11 @@ def run_one(cfg, seed, log=True, stream=None, model_cfg=None):
     events = RuleEventCounter(model) if (log and cfg.get("count_rule_events", True)) else None
     y_pred = np.zeros(n, int); correct = np.zeros(n); n_rules = np.zeros(n, int)
     tp, fp, fn = np.zeros(C), np.zeros(C), np.zeros(C)
-    t_log = 0.0
+    # R5 permutation importance (optional): prediction only, own random generator, so the run is unchanged
+    pcfg = dict(PERM_DEFAULT, **cfg["perm_importance"]) if (log and cfg.get("perm_importance")) else None
+    perm = dict(t=[], P=[], base_acc=[], **pcfg) if pcfg else None
+    prng = np.random.default_rng([seed, 5]) if pcfg else None
+    t_log = t_perm = 0.0
     t_start = time.perf_counter()
     for t in range(n):
         x_t, yt = X[t:t + 1], int(y[t])
@@ -64,12 +69,18 @@ def run_one(cfg, seed, log=True, stream=None, model_cfg=None):
                                   f1_cum=macro_f1_from_counts(tp, fp, fn),
                                   f1_win=macro_f1(y[lo:t + 1], y_pred[lo:t + 1], C),
                                   events=events.counts() if events else None)
-            t_log += time.perf_counter() - t0
+            if pcfg and (t + 1) % pcfg["every"] == 0 and t + 1 >= pcfg["window"]:
+                tp0 = time.perf_counter()
+                lo = t + 1 - pcfg["window"]
+                imp, base = permutation_importance(model, X[lo:t + 1], y[lo:t + 1], prng, pcfg["repeats"])
+                perm["t"].append(t + 1); perm["P"].append(imp); perm["base_acc"].append(base)
+                t_perm += time.perf_counter() - tp0
+            t_log += time.perf_counter() - t0        # R5 time is part of the logging time
     total = time.perf_counter() - t_start
     return dict(stream=st, model=model, logger=logger, y_pred=y_pred, n_rules=n_rules, y=y,
                 acc_final=float(correct.mean()), f1_final=macro_f1_from_counts(tp, fp, fn),
                 events=events.counts() if events else None,
-                proc_time_s=total - t_log, log_time_s=t_log)
+                proc_time_s=total - t_log, log_time_s=t_log, perm=perm, perm_time_s=t_perm)
 
 
 def plot_run(arr, st, outpath, every):
@@ -145,13 +156,23 @@ def _run_and_save(cfg, vname, mparams, s, vroot, plot, config_file, git, version
              proc_time_s=res["proc_time_s"], log_time_s=res["log_time_s"])
     d = Path(vroot) / f"seed_{s}"
     lg.save(str(d))
+    extra = {}
+    if res["perm"] is not None:
+        p = res["perm"]
+        np.savez_compressed(d / "permutation.npz", t=np.asarray(p["t"]), P=np.asarray(p["P"]),
+                            base_acc=np.asarray(p["base_acc"]))
+        m.update(analyze_permutation(p, st.truth, st.drift_points, st.drift_widths, arr["t"], arr["G"],
+                                     cfg["analysis"]))
+        m["perm_time_s"] = res["perm_time_s"]
+        extra = dict(perm_importance={k: p[k] for k in ("every", "window", "repeats")},
+                     perm_rng="numpy default_rng([seed, 5])", perm_time_s=res["perm_time_s"])
     json.dump(m, open(d / "metrics.json", "w"), indent=2)
     json.dump(dict(config_name=cfg["name"], config_file=config_file, variant=vname, seed=s,
                    model_params=mparams, stream=st.meta, n=int(len(st.y)), d=int(st.X.shape[1]),
                    drift_points=st.drift_points, drift_widths=st.drift_widths,
                    rule_events_final=res["events"], started_utc=started,
                    proc_time_s=res["proc_time_s"], log_time_s=res["log_time_s"],
-                   git=git, versions=versions),
+                   git=git, versions=versions, **extra),
               open(d / "meta.json", "w"), indent=2)
     if plot:
         plot_run(arr, st, str(d / "trajectories.png"), cfg["checkpoint_every"])
@@ -212,8 +233,12 @@ def main():
     ap.add_argument("--outdir", help="override the config's outdir (e.g. one folder per workflow)")
     ap.add_argument("--plot", action="store_true")
     ap.add_argument("--jobs", type=int, default=1, help="worker processes for the (variant, seed) runs")
+    ap.add_argument("--perm-importance", action="store_true",
+                    help="also log R5 permutation importance (every 500 samples, last 200, 5 repeats)")
     args = ap.parse_args()
     cfg = json.load(open(args.config))
+    if args.perm_importance:
+        cfg["perm_importance"] = dict(PERM_DEFAULT, **cfg.get("perm_importance", {}))
     run_config(cfg, seeds=args.seeds, variants=args.variants, plot=args.plot,
                outdir=args.outdir, config_file=args.config, jobs=args.jobs)
 

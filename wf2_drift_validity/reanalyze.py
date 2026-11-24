@@ -16,6 +16,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from relevance.analysis import analyze
+from relevance.permutation import analyze_permutation
 from relevance.streams import build_stream
 from run_relevance import aggregate, _git_info
 
@@ -36,13 +37,31 @@ def reanalyze_seed(seed_dir: Path) -> tuple:
         arr = {k: z[k] for k in z.files}
     old = json.load(open(seed_dir / "metrics.json"))
     new = analyze(arr, st.truth, st.drift_points, cfg["analysis"], cfg["checkpoint_every"], st.drift_widths)
-    changed = [k for k in old if k not in KEEP and k in new and not _same(old[k], new[k])]
-    missing = [k for k in old if k not in KEEP and k not in new]
+    keep = lambda k: k in KEEP or k == "perm_time_s" or k.startswith(("valid/P/", "agree/P_vs_G/", "perm/"))
+    changed = [k for k in old if not keep(k) and k in new and not _same(old[k], new[k])]
+    missing = [k for k in old if not keep(k) and k not in new]
     if changed or missing:
         raise SystemExit(f"{seed_dir}: existing metrics would change {changed} or disappear {missing}")
     added = sorted(k for k in new if k not in old)
     merged = dict(new)
-    merged.update({k: old[k] for k in KEEP if k in old})
+    merged.update({k: v for k, v in old.items() if keep(k)})
+    if (seed_dir / "permutation.npz").exists():                   # R5: recompute from permutation.npz
+        with np.load(seed_dir / "permutation.npz") as z:
+            perm = dict(t=z["t"], P=z["P"], base_acc=z["base_acc"], window=meta["perm_importance"]["window"])
+        pm = analyze_permutation(perm, st.truth, st.drift_points, st.drift_widths, arr["t"], arr["G"],
+                                 cfg["analysis"])
+        # Only the R5-vs-R1 agreement may change: the first version (agree/P_vs_G/jaccard) broke ties by
+        # feature index; it is replaced by the tie-aware agree/P_vs_G/topk_overlap.
+        bad = [k for k in pm if k in old and not k.startswith("agree/P_vs_G/") and not _same(old[k], pm[k])]
+        if bad:
+            raise SystemExit(f"{seed_dir}: R5 metrics would change {bad}")
+        added += [f"updated:{k}" for k in pm if k in old and not _same(old[k], pm[k])]
+        added += [k for k in pm if k not in old]
+        dropped = [k for k in merged if k.startswith("agree/P_vs_G/jaccard/")]
+        added += [f"removed:{k}" for k in dropped]
+        for k in dropped:
+            merged.pop(k)
+        merged.update(pm)
     json.dump(merged, open(seed_dir / "metrics.json", "w"), indent=2)
     return merged, added, cfg
 
@@ -50,6 +69,8 @@ def reanalyze_seed(seed_dir: Path) -> tuple:
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("roots", nargs="*", default=[str(ROOT / "results_wf2")])
+    ap.add_argument("--note", help="where to write the provenance note (default: reanalysis.json in the first "
+                                   "root, so re-analysing a subset never overwrites another record)")
     args = ap.parse_args()
     code = _git_info()                    # before any metrics.json is rewritten
     n_runs, added_all = 0, set()
@@ -72,8 +93,11 @@ def main():
                 analysis_code=code, roots=[str(Path(r)) for r in args.roots], runs=n_runs,
                 added_keys=sorted(added_all),
                 check="every metric already in metrics.json was recomputed and is identical; "
-                      "only the keys listed here were added. checkpoints.npz and meta.json are untouched.")
-    out = ROOT / "results_wf2" / "reanalysis.json"
+                      "only the keys listed here were added ('removed:' = the first R5-vs-R1 agreement, which broke ties by "
+                      "feature index, replaced by the tie-aware agree/P_vs_G/topk_overlap). checkpoints.npz, "
+                      "permutation.npz and meta.json are untouched.")
+    out = ROOT / args.note if args.note else Path(args.roots[0]).resolve() / "reanalysis.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
     json.dump(note, open(out, "w"), indent=2)
     print(f"{n_runs} runs; added keys: {sorted(added_all)}")
 

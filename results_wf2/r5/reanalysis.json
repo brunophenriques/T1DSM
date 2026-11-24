@@ -1,0 +1,19 @@
+{
+  "date_utc": "2026-11-23T18:58:41+00:00",
+  "analysis_code": {
+    "commit": "2e1c92aa6eb1bc029261bb101e17c44ad925ccfe",
+    "branch": "feature/wf2-sq3-validity",
+    "uncommitted_changes": false
+  },
+  "roots": [
+    "results_wf2\\r5"
+  ],
+  "runs": 40,
+  "added_keys": [
+    "agree/P_vs_G/topk_overlap/seg0",
+    "agree/P_vs_G/topk_overlap/seg1",
+    "removed:agree/P_vs_G/jaccard/seg0",
+    "removed:agree/P_vs_G/jaccard/seg1"
+  ],
+  "check": "every metric already in metrics.json was recomputed and is identical; only the keys listed here were added ('removed:' = the first R5-vs-R1 agreement, which broke ties by feature index, replaced by the tie-aware agree/P_vs_G/topk_overlap). checkpoints.npz, permutation.npz and meta.json are untouched."
+}
