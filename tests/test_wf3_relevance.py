@@ -7,10 +7,40 @@ import pytest
 
 from ENF_UnimNeuron_Safe import EvolvingNeuroFuzzyUnimSafe, FeatureSeparabilityBuffer
 from run_relevance import run_one
+from wf3_relevance.analyze import h6_summary, paired_stability
 from wf3_relevance.collect import FORGETTING, LocalWindow, RecursiveSeparability, RelevanceCollector
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_h3_pairs_the_same_times_with_the_same_rule_level_weights():
+    global_scores = {750: 1.0, 800: 0.5, 850: 0.2}
+    local_scores = {2: {750: 0.5, 800: 0.2, 900: 1.0}, 3: {800: 0.5}, 4: {900: 1.0}}
+    result = paired_stability(global_scores, local_scores)
+    assert result["r1_matched"] == pytest.approx((1 + 0.5 + 0.5) / 3)
+    assert result["r3_matched"] == pytest.approx((0.5 + 0.2 + 0.5) / 3)
+    assert result["r1_minus_r3"] == pytest.approx(0.8 / 3)
+    assert result["matched_rule_pairs"] == 3
+    assert result["matched_time_pairs"] == result["matched_rules"] == 2
+    assert result["eligible_r1_time_pairs"] == 3
+
+
+def test_h6_exact_differences_require_two_observed_recoveries():
+    rows = []
+    for seed, r4_recovered in ((0, False), (1, True)):
+        for method, time, recovered in (
+            ("R1", 150, True), ("R3_mean", 2650, True), ("R4", 10000, r4_recovered),
+        ):
+            rows.append(dict(stream="s1_gauss_abrupt", variant="open", seed=seed, method=method,
+                             recovery=time if recovered else np.nan, recovered=recovered,
+                             censored_time=time))
+    censored, observed = h6_summary(rows)
+    assert censored["R4_recovery"] is None
+    assert censored["R4_censor_limit"] == 10000
+    assert censored["R4_minus_R1"] is None and censored["R4_minus_R3_mean"] is None
+    assert observed["R4_censor_limit"] is None
+    assert observed["R4_minus_R1"] == 9850 and observed["R4_minus_R3_mean"] == 7350
 
 
 def test_recursive_matches_weighted_batch():

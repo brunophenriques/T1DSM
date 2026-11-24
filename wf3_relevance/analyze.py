@@ -5,6 +5,7 @@ import csv
 import json
 from collections import defaultdict
 from pathlib import Path
+from shutil import copyfile
 
 import numpy as np
 
@@ -15,6 +16,11 @@ from wf3_relevance.collect import FORGETTING, WARMUP, WINDOW_SIZES
 
 LAG = 200
 K = 3
+DRIFT_OFFSETS = (0, 50, 100, 150, 200, 500)
+EVIDENCE_TABLES = (
+    "h3_summary", "h3_paired", "h3_paired_summary", "h6_open", "ranking_recovery",
+    "validity", "r2_checkpoints", "window_tradeoff", "first_last_summary", "rule_51", "runs",
+)
 
 
 def read_csv(path):
@@ -37,13 +43,26 @@ def mean(values):
     return float(np.mean(values)) if len(values) else np.nan
 
 
-def stability(vectors):
-    scores = []
+def stability_scores(vectors):
+    scores = {}
     for t, current in vectors.items():
         previous = vectors.get(t - LAG)
         if previous is not None and not is_constant(current) and not is_constant(previous):
-            scores.append(topk_jaccard(previous, current, K))
-    return mean(scores), len(scores)
+            scores[t] = topk_jaccard(previous, current, K)
+    return scores
+
+
+def paired_stability(global_scores, local_scores):
+    """Use the same time pair and weight for both methods in each rule-level comparison."""
+    matched = [(uid, t, global_scores[t], score) for uid, scores in local_scores.items()
+               for t, score in scores.items() if t in global_scores]
+    r1 = mean([global_score for _, _, global_score, _ in matched])
+    r3 = mean([local_score for _, _, _, local_score in matched])
+    return dict(
+        r1_matched=r1, r3_matched=r3, r1_minus_r3=r1 - r3,
+        matched_rule_pairs=len(matched), matched_time_pairs=len({t for _, t, _, _ in matched}),
+        eligible_r1_time_pairs=len(global_scores), matched_rules=len({uid for uid, _, _, _ in matched}),
+    )
 
 
 def local_precision_at_endpoint(first, last, weights, drift, before, after):
@@ -72,12 +91,16 @@ def summarize_run(path):
     }
 
     valid_local = defaultdict(dict)
+    active_by_time = defaultdict(set)
     for row in local:
         t = int(row["t"])
+        uid = int(row["uid"])
+        if t in checkpoints:
+            active_by_time[t].add(uid)
         if t in checkpoints and row["first_sample"]:
             w = vector(row, "R3")
             if np.isfinite(w).all():
-                valid_local[int(row["uid"])][t] = (int(row["first_sample"]), int(row["last_sample"]), w)
+                valid_local[uid][t] = (int(row["first_sample"]), int(row["last_sample"]), w)
 
     endpoints = []
     # Compare distinct windows at the two ends of the same rule's observed history.
@@ -102,7 +125,8 @@ def summarize_run(path):
     segments = [(0, drift or meta["n"], before)]
     if drift is not None:
         segments.append((drift, meta["n"], after))
-    stability_rows, precision_rows = [], []
+    stability_rows, precision_rows, paired_rows = [], [], []
+    precision_methods = ("R1", *(f"R2_{decay}" for decay in FORGETTING))
     for segment, (start, end, truth) in enumerate(segments):
         for method in ("R1", "R4", *(f"window_{size}" for size in WINDOW_SIZES)):
             size = int(method.split("_")[-1]) if method.startswith("window_") else 200
@@ -110,35 +134,35 @@ def summarize_run(path):
                 t: w for t, w in weights[method].items()
                 if start + size <= t <= end
             }
-            jaccard, pairs = stability(clean)
-            stability_rows.append(dict(**keys, segment=segment, method=method, jaccard=jaccard,
-                                       pairs=pairs))
+            scores = stability_scores(clean)
+            if method == "R1":
+                global_scores = scores
+            stability_rows.append(dict(**keys, segment=segment, method=method,
+                                       jaccard=mean(list(scores.values())), pairs=len(scores)))
 
-        local_scores, local_precision = [], []
-        for observations in valid_local.values():
+        local_scores, local_precision = {}, []
+        for uid, observations in valid_local.items():
             # H3 pairs the same rule in one concept. Its last 200 wins may span much more stream time.
             clean = {t: w for t, (first, _, w) in observations.items()
                      if start < first and start + 200 <= t <= end}
-            score, pairs = stability(clean)
-            if pairs:
-                local_scores.append((score, pairs))
+            local_scores[uid] = stability_scores(clean)
             local_precision.extend(topk_precision(w, truth, K) for w in clean.values())
-        local_pairs = sum(pairs for _, pairs in local_scores)
-        local_mean = (
-            sum(score * pairs for score, pairs in local_scores) / local_pairs
-            if local_pairs else np.nan
-        )
-        stability_rows.append(dict(**keys, segment=segment, method="R3", jaccard=local_mean,
-                                   pairs=local_pairs))
+        scores = [score for rule_scores in local_scores.values() for score in rule_scores.values()]
+        stability_rows.append(dict(**keys, segment=segment, method="R3",
+                                   jaccard=mean(scores), pairs=len(scores)))
+        active_rules = {uid for t, uids in active_by_time.items()
+                        if start + 200 <= t <= end for uid in uids}
+        paired_rows.append(dict(**keys, segment=segment, active_rules=len(active_rules),
+                                **paired_stability(global_scores, local_scores)))
         precision_rows.append(dict(**keys, segment=segment, method="R3",
                                    precision=mean(local_precision), observations=len(local_precision)))
-        for method in ("R1", *(f"R2_{decay}" for decay in FORGETTING)):
+        for method in precision_methods:
             precision = [topk_precision(w, truth, K) for t, w in weights[method].items()
                          if start + 200 <= t <= end]
             precision_rows.append(dict(**keys, segment=segment, method=method,
                                        precision=mean(precision), observations=len(precision)))
 
-    recovery = []
+    recovery, drift_precision = [], []
     if drift is not None:
         # H6 compares R1, R4 and aggregated R3. R2 recovery is a separate descriptive check.
         for method in methods:
@@ -149,11 +173,22 @@ def summarize_run(path):
             ]
             recovery.append(dict(**keys, method=method,
                                  **ranking_recovery(times, precision, drift)))
+        if meta["config_name"] == "s1_gauss_abrupt":
+            for offset in DRIFT_OFFSETS:
+                t = drift + offset
+                if t not in checkpoints:
+                    continue
+                truth = before if offset == 0 else after
+                for method in precision_methods:
+                    drift_precision.append(dict(
+                        **keys, checkpoint=t, method=method,
+                        precision=topk_precision(weights[method][t], truth, K),
+                    ))
 
     run = dict(**keys, accuracy=metrics["acc_final"], rules_final=metrics["rules_final"],
                coverage_pct=mean([float(row["r3_coverage_pct"]) for row in checkpoints.values()]),
                ms_per_sample=metrics["wf3_ms_per_sample"])
-    return run, stability_rows, precision_rows, recovery, endpoints
+    return run, stability_rows, precision_rows, recovery, endpoints, paired_rows, drift_precision
 
 
 def stability_summary(rows):
@@ -182,12 +217,53 @@ def h6_summary(recovery):
     for seed, rows in sorted(by_seed.items()):
         summary = {"seed": seed}
         for method in ("R1", "R3_mean", "R4"):
-            for key in ("recovery", "recovered", "censored_time"):
-                summary[f"{method}_{key}"] = rows[method][key]
+            result = rows[method]
+            summary[f"{method}_recovered"] = result["recovered"]
+            summary[f"{method}_recovery"] = result["recovery"] if result["recovered"] else None
+            summary[f"{method}_censor_limit"] = None if result["recovered"] else result["censored_time"]
         for method in ("R1", "R3_mean"):
-            summary[f"R4_minus_{method}"] = rows["R4"]["recovery"] - rows[method]["recovery"]
+            summary[f"R4_minus_{method}"] = (
+                rows["R4"]["recovery"] - rows[method]["recovery"]
+                if rows["R4"]["recovered"] and rows[method]["recovered"] else None
+            )
         output.append(summary)
     return output
+
+
+def paired_h3_summary(rows):
+    groups = defaultdict(list)
+    for row in rows:
+        groups[(row["stream"], row["variant"], row["segment"])].append(row)
+    output = []
+    for (stream, variant, segment), group in sorted(groups.items()):
+        diffs = [row["r1_minus_r3"] for row in group if row["matched_rule_pairs"]]
+        counts = {key: sum(row[key] for row in group) for key in (
+            "matched_rule_pairs", "matched_time_pairs", "eligible_r1_time_pairs", "matched_rules", "active_rules",
+        )}
+        output.append(dict(
+            stream=stream, variant=variant, segment=segment,
+            mean_r1_minus_r3=mean(diffs), sd_r1_minus_r3=np.std(diffs, ddof=1) if len(diffs) > 1 else np.nan,
+            positive_seeds=sum(diff > 0 for diff in diffs), valid_seeds=len(diffs), total_seeds=len(group),
+            **counts,
+        ))
+    return output
+
+
+def checkpoint_summary(rows):
+    groups = defaultdict(list)
+    for row in rows:
+        groups[(row["variant"], row["checkpoint"], row["method"])].append(row["precision"])
+    return [dict(variant=variant, checkpoint=t, method=method, mean_precision=mean(scores), seeds=len(scores))
+            for (variant, t, method), scores in sorted(groups.items())]
+
+
+def endpoint_summary(rows):
+    groups = defaultdict(list)
+    for row in rows:
+        groups[(row["stream"], row["variant"])].append(row)
+    return [dict(stream=stream, variant=variant, run_rule_pairs=len(group),
+                 mean_jaccard=mean([r["jaccard"] for r in group if np.isfinite(r["jaccard"])]))
+            for (stream, variant), group in sorted(groups.items())]
 
 
 def make_curve(outdir, stability_rows, recovery):
@@ -223,7 +299,7 @@ def make_curve(outdir, stability_rows, recovery):
                         markersize=5 if variant == "open" else 8, capsize=3, label=variant)
     if not rows:
         plt.close(fig)
-        return
+        return False
     recovery_ax.fill_between(WINDOW_SIZES, [w / 2 for w in WINDOW_SIZES],
                              [w + 50 for w in WINDOW_SIZES], alpha=0.15, label="Predicted range")
     stable_ax.set(ylabel="Mean top-3 Jaccard", title="S3 · Stability at lag 200", ylim=(0, 1.05))
@@ -236,38 +312,59 @@ def make_curve(outdir, stability_rows, recovery):
     fig.savefig(outdir / "window_tradeoff.png", dpi=160)
     plt.close(fig)
     write_csv(outdir / "window_tradeoff.csv", rows)
+    return True
 
 
-def analyze(root):
+def analyze(root, evidence_dir=None):
     files = sorted(root.rglob("wf3_checkpoints.csv"))
     if not files:
         raise SystemExit(f"No Workflow 3 runs in {root}")
     outdir = root / "analysis"
     outdir.mkdir(exist_ok=True)
     runs, stability_rows, precision_rows, recovery, endpoints = [], [], [], [], []
+    paired, drift_precision = [], []
     for file in files:
-        run, stable, precision, recovered, comparisons = summarize_run(file)
+        run, stable, precision, recovered, comparisons, matched, checkpoints = summarize_run(file)
         runs.append(run)
         stability_rows.extend(stable)
         precision_rows.extend(precision)
         recovery.extend(recovered)
         endpoints.extend(comparisons)
+        paired.extend(matched)
+        drift_precision.extend(checkpoints)
+    rule_51 = [row for row in endpoints if (
+        row["stream"], row["variant"], row["seed"], row["uid"]
+    ) == ("s1_gauss_abrupt", "open", 0, 51)]
+    written = set()
     for name, rows in (("runs", runs), ("h3_stability", stability_rows),
                        ("h3_summary", stability_summary(stability_rows)),
+                       ("h3_paired", paired), ("h3_paired_summary", paired_h3_summary(paired)),
                        ("h6_open", h6_summary(recovery)),
                        ("validity", precision_rows), ("ranking_recovery", recovery),
-                       ("first_last_local", endpoints)):
+                       ("r2_checkpoints", checkpoint_summary(drift_precision)),
+                       ("first_last_local", endpoints), ("first_last_summary", endpoint_summary(endpoints)),
+                       ("rule_51", rule_51)):
         if rows:
             write_csv(outdir / f"{name}.csv", rows)
-    make_curve(outdir, stability_rows, recovery)
+            written.add(name)
+    if make_curve(outdir, stability_rows, recovery):
+        written.add("window_tradeoff")
+    if evidence_dir is not None:
+        missing = set(EVIDENCE_TABLES) - written
+        if missing:
+            raise SystemExit(f"Run the full S1/S3 suite before exporting: missing {', '.join(sorted(missing))}")
+        evidence_dir.mkdir(parents=True, exist_ok=True)
+        for name in EVIDENCE_TABLES:
+            copyfile(outdir / f"{name}.csv", evidence_dir / f"{name}.csv")
     print(f"Analyzed {len(runs)} runs. Results: {outdir}")
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--results", type=Path, default=Path("results_wf3"))
+    parser.add_argument("--evidence-dir", type=Path, help="export review CSVs after the full S1/S3 suite")
     args = parser.parse_args()
-    analyze(args.results)
+    analyze(args.results, args.evidence_dir)
 
 
 if __name__ == "__main__":

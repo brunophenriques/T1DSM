@@ -1,0 +1,11 @@
+seed,R1_recovered,R1_recovery,R1_censor_limit,R3_mean_recovered,R3_mean_recovery,R3_mean_censor_limit,R4_recovered,R4_recovery,R4_censor_limit,R4_minus_R1,R4_minus_R3_mean
+0,True,150.0,,True,3000.0,,False,,10000.0,,
+1,True,150.0,,True,2650.0,,False,,10000.0,,
+2,True,150.0,,True,2650.0,,False,,10000.0,,
+3,True,150.0,,True,2800.0,,False,,10000.0,,
+4,True,150.0,,True,2000.0,,False,,10000.0,,
+5,True,150.0,,True,2600.0,,False,,10000.0,,
+6,True,150.0,,True,2500.0,,False,,10000.0,,
+7,True,150.0,,True,2800.0,,False,,10000.0,,
+8,True,150.0,,True,2650.0,,False,,10000.0,,
+9,True,100.0,,True,2700.0,,False,,10000.0,,

@@ -14,6 +14,8 @@ python -m pytest -q tests/test_wf3_relevance.py
 
 Use the first command for a single-seed demo. The next two run the protocol seeds 0–9 for both `ref` and `open`. Use `--outdir` on the runner and `--results` on the analysis command for a custom output folder. The default `results_wf3/` directory contains generated files and is excluded from Git.
 
+The tables linked in [FINDINGS.md](FINDINGS.md) are committed under [`evidence/`](evidence/). After running the full S1/S3 suite, regenerate them with `python -m wf3_relevance.analyze --evidence-dir wf3_relevance/evidence`. Runtime values in `runs.csv` depend on the machine and concurrent load.
+
 Each seed has `wf3_checkpoints.csv` with R1, R4, coverage, the weighted mean of R3, the three R2 variants and the global window sweep. `wf3_local.csv` stores R3 by rule ID with window size and first/last sample. Times are one-based counts. `metrics.json` reports `wf3_ms_per_sample`, the wall time spent in WF3 callbacks per input sample, including activation recomputation and checkpoint collection. This excludes file writing.
 
 ## Where relevance lives
@@ -34,8 +36,8 @@ Sources [Elec2 export](../results_exp/Elec2_real/rules_ENF_Unim_Safe.tex) and [A
 
 ## Analysis
 
-- **H3** uses top-3 Jaccard at lag 200 within one concept, after the first 500 samples. R3 compares the same rule ID at both checkpoints and uses only windows whose oldest sample belongs to the current concept. Uniform weights are excluded from stability to avoid a ranking determined by index order. The tables include the number of eligible pairs and seeds.
-- **H6** uses a window-count-weighted mean of valid R3 vectors for a single local ranking per checkpoint. Recovery is the first of three consecutive post-drift checkpoints with tie-aware top-3 precision of 1. Each run records whether recovery was observed and its censoring time. The first/last table includes rules with two distinct valid windows.
+- **H3** uses top-3 Jaccard at lag 200 within one concept, after the first 500 samples. The paired table compares R1 and R3 at the same checkpoints for each eligible rule-level pair, then averages differences within seeds. Rules must be active at both checkpoints and have valid, nonuniform local weights. The tables report matched pairs and how many active rules contributed.
+- **H6** uses a window-count-weighted mean of valid R3 vectors for a single local ranking per checkpoint. Recovery is the first of three consecutive post-drift checkpoints with tie-aware top-3 precision of 1. The H6 CSV puts a right-censored run's follow-up in its censor-limit field and leaves its recovery time and exact pairwise delays blank.
 - **Window sweep** uses global diagnostic windows on the same stream, with S3 stability and S1 recovery. The predicted range runs from half a window to a full window plus a 50-sample refresh interval. The plot shows mean ± sample SD across seeds. Both variants see the same global diagnostic windows for a given seed.
 
 Two risks affect interpretation. Sparse winners can leave local windows short, stale or overlapping even at lag 200, so the analysis reports coverage, window bounds and eligible pairs. Recomputing activations adds work proportional to the active rule count, which can grow in `open`. Callback time is measured separately, and the single-seed measurement is easier to interpret than wall time from concurrent runs.
