@@ -1,0 +1,2 @@
+stream,variant,seed,uid,first_t,last_t,first_start_sample,first_end_sample,last_start_sample,last_end_sample,first_precision,last_precision,jaccard,first_weights,last_weights
+s1_gauss_abrupt,open,0,51,5950,20000,4900,5932,11575,19990,1.0,1.0,0.0,0.46679934 1 0.38564742 0.23557792 0.20367577 0.23130831 0.23473141 0.20202276 0.20347705 0.21072011,0.2004013 0.20022415 0.20151663 0.2048514 0.20200982 0.91535893 1 0.8709147 0.20179254 0.20020915

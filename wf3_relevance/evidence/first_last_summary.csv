@@ -1,0 +1,5 @@
+stream,variant,run_rule_pairs,mean_jaccard
+s1_gauss_abrupt,open,669,0.27309417040358747
+s1_gauss_abrupt,ref,42,0.17857142857142858
+s3_gauss_stationary,open,608,0.50625
+s3_gauss_stationary,ref,42,0.9761904761904762

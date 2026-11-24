@@ -45,6 +45,8 @@ def unim_aggregate(h: np.ndarray, e: float = 0.5) -> float:
 
 @dataclass
 class ENFRuleSafe:
+    """A fuzzy region and the class evidence accumulated around its centre."""
+
     center: np.ndarray          # (d,)
     sigma: float
     support: int
@@ -272,7 +274,7 @@ class EvolvingNeuroFuzzyUnimSafe:
         # safe local update of consequents
         self._safe_update_consequents(x, y)
 
-        # update separability buffer and refresh feature weights from time to time
+        # R1 is global. Each refresh uses the latest labelled samples in the buffer.
         self.sep_buffer.add(x, y)
         if self.K % 50 == 0:
             self.current_feature_weights = self.sep_buffer.compute_feature_weights()
@@ -280,6 +282,7 @@ class EvolvingNeuroFuzzyUnimSafe:
     # --------------------------------------------------------------
 
     def _create_rule(self, x: np.ndarray, y: int, sigma: float) -> None:
+        # R4 reflects each rule's birth-time weights and any later merge.
         w = self.current_feature_weights.copy()
         class_counts = np.zeros(self.n_classes, dtype=float)
         class_counts[y] = 1.0
@@ -374,6 +377,8 @@ class EvolvingNeuroFuzzyUnimSafe:
         dists = np.zeros(self.n_rules_, dtype=float)
 
         for idx, r in enumerate(self.rules):
+            # Membership measures the fit per feature. A small stored weight pulls it towards e.
+            # UnimNeuron combines the adjusted memberships into one activation.
             a = gaussian_membership(x, r.center, r.sigma)
             h = r.w * a + (1.0 - r.w) * self.e
             y_r = unim_aggregate(h, e=self.e)
@@ -397,7 +402,7 @@ class EvolvingNeuroFuzzyUnimSafe:
         else:
             w_acts = acts
 
-        # aggregate rule-wise class probabilities
+        # Rules vote with their class probabilities, weighted by their activation.
         agg = np.zeros(self.n_classes, dtype=float)
         for w, r in zip(w_acts, self.rules):
             agg += w * r.class_probs()
