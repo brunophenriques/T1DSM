@@ -3,6 +3,8 @@
 Run with `python tests/test_wf5_windows.py` or `pytest tests/`.
 """
 import sys
+import json
+import pytest
 from pathlib import Path
 import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
@@ -97,7 +99,159 @@ def test_trough_is_searched_near_the_drift_only():
     assert not r["dropped"] and r["restab"] == 0.0 and r["t_trough"] <= 11000
 
 
+def test_statuses_and_negative_gradual_offset():
+    r = restabilisation(T, _series(), [10000])
+    assert r["restab_status"] == "no_destabilisation"
+    assert not r["restabilised"] and r["restab_from_dp"] == 0
+    r = restabilisation(T, _series(switch_at=9600), [10000], [1000])
+    assert r["restab_from_dp_status"] == "recovered"
+    assert r["restab_from_dp"] == -200  # lag-200 comparison settles at 9800
+    assert r["restab"] == 50
+    assert r["restab_status"] == "recovered" and r["restabilised"]
+    r = restabilisation(T, _series(switch_at=10150), [10000])
+    assert r["restab_status"] == "recovered" and r["restab"] == 350
+
+
+def test_undefined_threshold_and_insufficient_post_data():
+    r = restabilisation(T, _series(), [100])
+    assert r["restab_status"] == "undefined"
+    assert r["restab_reason"] == "undefined_pre_drift_threshold"
+    assert np.isnan(r["restab"]) and not r["restabilised"]
+    r = restabilisation(T, _series(), [19950])
+    assert r["restab_reason"] == "insufficient_post_drift_data"
+    assert np.isnan(r["restab_from_dp"])
+
+
+def test_explicit_censor_limit():
+    G = _series()
+    G[T > 10000] = np.random.default_rng(1).uniform(0, 1, G[T > 10000].shape)
+    r = restabilisation(T, G, [10000])
+    assert r["restab_status"] == r["restab_from_dp_status"] == "censored"
+    assert not r["restabilised"] and np.isnan(r["restab"])
+    assert r["restab_censor_limit"] == r["restab_from_dp_censor_limit"] == 10000
+
+
+def test_load_runs_missing_seed_and_file(tmp_path, monkeypatch):
+    import pytest
+    import wf5_windows.analyze_wf5 as analysis
+    monkeypatch.setattr(analysis, "ROOT", tmp_path)
+    base = tmp_path / analysis.STREAMS["S1"][0]
+    for seed in range(9):
+        (base / f"seed_{seed}").mkdir(parents=True)
+    with pytest.raises(ValueError, match=r"S1: missing seeds \[9\]"):
+        analysis.load_runs("S1")
+    (base / "seed_9").mkdir()
+    with pytest.raises(ValueError, match="S1 seed 0: missing required file.*checkpoints.npz"):
+        analysis.load_runs("S1")
+
+
+@pytest.mark.parametrize("end", [9900, 10000, 10500])
+def test_protocol_undefined_preserves_early_midpoint_recovery(end):
+    mask = T <= end
+    r = restabilisation(T[mask], _series(switch_at=9600)[mask], [10000], [1000])
+    assert r["dropped"] and not r["restabilised"]
+    assert r["restab_status"] == "undefined"
+    assert r["restab_reason"] == "insufficient_post_transition_data"
+    assert np.isnan(r["restab"]) and np.isnan(r["restab_censor_limit"])
+    assert np.isnan(r["restab_censored"])
+    assert r["restab_from_dp_status"] == "recovered"
+    assert r["restab_from_dp"] == -200
+    assert r["restab_from_dp_reason"] is None
+    assert np.isnan(r["restab_from_dp_censor_limit"])
+
+
+@pytest.mark.parametrize("end", [9750, 10000, 10500, 10600, 11000])
+def test_censoring_requires_observations_at_or_after_anchor(end):
+    mask = T <= end
+    G = _series()
+    G[T >= 9600] = np.random.default_rng(1).uniform(0, 1, G[T >= 9600].shape)
+    r = restabilisation(T[mask], G[mask], [10000], [1000])
+    assert r["dropped"]
+    for key, anchor in (("restab", 10500), ("restab_from_dp", 10000)):
+        limit = r[f"{key}_censor_limit"]
+        assert np.isnan(limit) or limit >= 0
+        assert np.isnan(r[key])
+        if end < anchor or (key == "restab" and end == anchor):
+            assert r[f"{key}_status"] == "undefined"
+            assert r[f"{key}_reason"] is not None
+            assert np.isnan(limit) and np.isnan(r[f"{key}_censored"])
+        else:
+            assert r[f"{key}_status"] == "censored"
+            assert limit == end - anchor
+
+
+@pytest.fixture
+def saved_input_factory(tmp_path, monkeypatch):
+    import wf5_windows.analyze_wf5 as analysis
+    monkeypatch.setattr(analysis, "ROOT", tmp_path)
+
+    def create(name):
+        n, d = (10000, 7) if name == "Elec2" else (20000, 3 if name == "S4" else 10)
+        dps = [10000] if name in ("S1", "S2", "S4") else []
+        widths = [1000 if name == "S2" else 0] if dps else []
+        base = tmp_path / analysis.STREAMS[name][0]
+        for seed in range(1 if name == "Elec2" else 10):
+            sd = base / f"seed_{seed}"
+            sd.mkdir(parents=True)
+            meta = dict(seed=seed, n=n, d=d, drift_points=dps, drift_widths=widths,
+                        stream=dict(n=n, d=d))
+            if name != "Elec2":
+                meta["stream"].update(drift_at=10000 if dps else None,
+                                      drift_width=widths[0] if widths else 0)
+            (sd / "meta.json").write_text(json.dumps(meta), encoding="utf-8")
+            t = np.arange(50, n + 1, 50)
+            np.savez(sd / "checkpoints.npz", t=t, G=np.tile(np.arange(d), (len(t), 1)))
+        return base / "seed_0" / "meta.json"
+    return create
+
+
+@pytest.mark.parametrize("name", ["S1", "S2", "S3", "S4", "Elec2"])
+def test_valid_stream_metadata(saved_input_factory, name):
+    from wf5_windows.analyze_wf5 import load_runs
+    saved_input_factory(name)
+    runs, _, _ = load_runs(name)
+    assert len(runs) == (1 if name == "Elec2" else 10)
+    assert runs[0]["dps"] == ([10000] if name in ("S1", "S2", "S4") else [])
+    assert runs[0]["widths"] == ([1000 if name == "S2" else 0] if runs[0]["dps"] else [])
+
+
+@pytest.mark.parametrize("name,field,value", [
+    ("S1", "drift_points", "missing"), ("S2", "drift_widths", "missing"),
+    ("S4", "drift_points", []), ("S3", "drift_points", "missing"),
+    ("S3", "drift_points", [10000]), ("Elec2", "drift_points", [5000]),
+    ("S1", "drift_points", ["10000"]), ("S1", "drift_points", [True]),
+    ("S1", "drift_points", [float("nan")]), ("S1", "drift_points", [float("inf")]),
+    ("S1", "drift_points", [0]), ("S1", "drift_points", [20000]),
+    ("S1", "drift_points", [10000, 9000]), ("S1", "drift_points", [10000, 10000]),
+    ("S1", "drift_points", [9000]), ("S2", "drift_widths", []),
+    ("S2", "drift_widths", [-1]), ("S2", "drift_widths", [float("inf")]),
+    ("S2", "drift_widths", ["1000"]), ("S2", "drift_widths", [0]),
+    ("S2", "drift_widths", [50000]),
+])
+def test_invalid_drift_metadata(saved_input_factory, name, field, value):
+    from wf5_windows.analyze_wf5 import load_runs
+    path = saved_input_factory(name)
+    meta = json.loads(path.read_text())
+    if value == "missing":
+        meta.pop(field)
+    else:
+        meta[field] = value
+    path.write_text(json.dumps(meta), encoding="utf-8")
+    with pytest.raises(ValueError, match=rf"{name} seed 0: {field}"):
+        load_runs(name)
+
+
+@pytest.mark.parametrize("meta,field", [([], "meta.json"), ({"stream": []}, "stream"),
+                                         ({}, "stream")])
+def test_malformed_metadata_structure(saved_input_factory, meta, field):
+    from wf5_windows.analyze_wf5 import load_runs
+    path = saved_input_factory("S1")
+    path.write_text(json.dumps(meta), encoding="utf-8")
+    with pytest.raises(ValueError, match=rf"S1 seed 0: {field} must be a dictionary"):
+        load_runs("S1")
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
-        if name.startswith("test_"):
+        if name.startswith("test_") and not fn.__code__.co_argcount:
             fn(); print("PASS", name)

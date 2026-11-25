@@ -119,7 +119,13 @@ def restabilisation(t, G, drift_points, drift_widths=None, every=50, lag=LAG, pc
 
     Returns dict with threshold, n_pre, trough (min wτ), t_trough, dropped (trough < threshold),
     restabilised, and the time from the transition end (`restab`, protocol) and from the drift point
-    (`restab_from_dp`). When the trough is not below the threshold, both times are 0 and dropped=False.
+    (`restab_from_dp`). When the trough is not below the threshold, both times are descriptive zeros, dropped=False,
+    restabilised=False and restab_status="no_destabilisation" (no recovery event).
+    Each anchor has its own status: recovered, censored, or undefined. Undefined cases
+    include an explicit reason and NaN times. The midpoint search starts at the trough
+    and can give a negative signed offset; the protocol search starts after transition end.
+    An anchor without eligible observations is undefined, independently of the other anchor.
+    Censoring requires an eligible observation at or after the anchor; its limit is never negative.
     When it never comes back, the times are NaN and `*_censored` holds the time to the last checkpoint."""
     t = np.asarray(t, dtype=float)
     lc = lag // every
@@ -131,16 +137,25 @@ def restabilisation(t, G, drift_points, drift_widths=None, every=50, lag=LAG, pc
     pre_vals = s[pre_pairs & np.isfinite(s)]
     thr = float(np.percentile(pre_vals, pct)) if pre_vals.size else np.nan
     out = dict(threshold=thr, n_pre=int(pre_vals.size), trough=np.nan, t_trough=np.nan, dropped=False,
-               restabilised=False, restab=np.nan, restab_from_dp=np.nan,
+               restabilised=False, restab_status="undefined", restab_from_dp_status="undefined",
+               restab_reason=None, restab_from_dp_reason=None,
+               restab_censor_limit=np.nan, restab_from_dp_censor_limit=np.nan,
+               restab=np.nan, restab_from_dp=np.nan,
                restab_censored=np.nan, restab_from_dp_censored=np.nan)
     search = np.flatnonzero((t > tr_s) & (t <= tr_e + trough_samples) & np.isfinite(s))
-    if not np.isfinite(thr) or search.size == 0:
+    if not np.isfinite(thr) or search.size < consecutive:
+        reason = "undefined_pre_drift_threshold" if not np.isfinite(thr) else "insufficient_post_drift_data"
+        out.update(restab_reason=reason, restab_from_dp_reason=reason)
         return out
     d0 = int(search[np.argmin(s[search])])
     out.update(trough=float(s[d0]), t_trough=float(t[d0]))
     if s[d0] >= thr:                                        # never destabilised
-        out.update(restabilised=True, restab=0.0, restab_from_dp=0.0,
+        out.update(restab_status="no_destabilisation", restab_from_dp_status="no_destabilisation",
+                   restabilised=False, restab=0.0, restab_from_dp=0.0,
                    restab_censored=0.0, restab_from_dp_censored=0.0)
+        if not np.any((t > tr_e) & np.isfinite(s)):
+            out.update(restab_status="undefined", restab_reason="insufficient_post_transition_data",
+                       restab=np.nan, restab_censored=np.nan)
         return out
     out["dropped"] = True
     above = np.isfinite(s) & (s >= thr)
@@ -150,8 +165,18 @@ def restabilisation(t, G, drift_points, drift_widths=None, every=50, lag=LAG, pc
                                ("restab_from_dp", d0, dp)):
         hit = first_sustained(above[start:], consecutive)
         if hit is None:
+            # Midpoint recovery may be observed before dp, but censoring cannot start
+            # before its anchor. The protocol slice already excludes transition end.
+            eligible = np.isfinite(s[start:]) & (t[start:] >= anchor)
+            if not np.any(eligible):
+                out[f"{key}_reason"] = ("insufficient_post_transition_data" if key == "restab"
+                                        else "insufficient_post_midpoint_data")
+                continue
+            out[f"{key}_status"] = "censored"
+            out[f"{key}_censor_limit"] = float(t[-1] - anchor)
             out[f"{key}_censored"] = float(t[-1] - anchor)
             continue
+        out[f"{key}_status"] = "recovered"
         out[key] = out[f"{key}_censored"] = float(t[start + hit]) - anchor
     out["restabilised"] = bool(np.isfinite(out["restab"]))
     return out

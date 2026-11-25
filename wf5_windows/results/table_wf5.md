@@ -18,14 +18,14 @@ Consecutive pairs exclude the pair(s) whose windows overlap a drift or transitio
 
 Weighted τ at lag 200 back above the 10th percentile of its clean pre-drift values for 3 checkpoints in a row, counted from the trough (minimum within 1,000 samples after the drift, as for accuracy recovery in §10). The S3 placebo row applies the same rule to the stationary stream with a fake drift at 10,000: it is the noise floor of the time.
 
-| Stream | Threshold (wτ) | Dropped | Restabilised | From transition end (protocol) | From drift point | WF2 ranking recovery (from dp) |
-|---|---|---|---|---|---|---|
-| S3 placebo (no drift; fake dp 10,000) | 0.446 ± 0.004 [0.443, 0.449] | 5/10 | 10/10 | 295 ± 409 [70, 550] | 295 ± 409 [70, 550] | – |
-| S1 | 0.446 ± 0.004 [0.443, 0.449] | 10/10 | 10/10 | 380 ± 95 [330, 440] | 380 ± 95 [330, 440] | 145 ± 16 [135, 150] |
-| S2 | 0.449 ± 0.008 [0.444, 0.453] | 10/10 | 10/10 | 50 ± 0 [50, 50] | 330 ± 48 [300, 360] | 190 ± 32 [170, 210] |
-| S4 | 0.182 ± 0.000 [0.182, 0.182] | 0/10 | 10/10 | 0 ± 0 [0, 0] | 0 ± 0 [0, 0] | 50 ± 0 [50, 50] |
+| Stream | Threshold (wτ) | Dropped | Recovered after drop | Right-censored | No destabilisation | Undefined | Descriptive time from transition end | Descriptive time from drift point | Observed recovery from drift point | WF2 ranking recovery (from dp) |
+|---|---|---|---|---|---|---|---|---|---|---|
+| S3 placebo (no drift; fake dp 10,000) | 0.446 ± 0.004 [0.443, 0.449] | 5/10 | 5/10 | 0/10 | 5/10 | 0/10 | 295 ± 409 [70, 550] | 295 ± 409 [70, 550] | 590 ± 399 [280, 900] | – |
+| S1 | 0.446 ± 0.004 [0.443, 0.449] | 10/10 | 10/10 | 0/10 | 0/10 | 0/10 | 380 ± 95 [330, 440] | 380 ± 95 [330, 440] | 380 ± 95 [330, 440] | 145 ± 16 [135, 150] |
+| S2 | 0.449 ± 0.008 [0.444, 0.453] | 10/10 | 10/10 | 0/10 | 0/10 | 0/10 | 50 ± 0 [50, 50] | 330 ± 48 [300, 360] | 330 ± 48 [300, 360] | 190 ± 32 [170, 210] |
+| S4 | 0.182 ± 0.000 [0.182, 0.182] | 0/10 | 0/10 | 0/10 | 10/10 | 0/10 | 0 ± 0 [0, 0] | 0 ± 0 [0, 0] | – | 50 ± 0 [50, 50] |
 
-Censored runs (never back above the threshold) are NaN in the means; their lower bound is in `restab_per_run.csv` (`restab_censored`).
+Descriptive times include zero-time no-destabilisation cases; these are not observed recoveries. Observed recovery means include recovered cases only. Status counts use the transition-end search; midpoint statuses are recorded separately in the CSV. Midpoint offsets may be negative. Paired time tests retain the descriptive zero-time convention. Censored and undefined runs are NaN in means; censoring limits are separately recorded in `restab_per_run.csv` (`restab_censor_limit` and `restab_from_dp_censor_limit`).
 
 ### Paired tests against the placebo (same seed = same pre-drift data; Wilcoxon, Holm over these tests)
 
