@@ -12,12 +12,13 @@ def plot_rule_growth(
     drift_points=None,
 ):
     """
-    Plots active rules alongside cumulative created and deleted/merged rule counts.
+    Plots active rules alongside cumulative created and deleted/merged rule counts
+    (object-ID change approximation).
     """
     fig, ax = plt.subplots(figsize=(8.5, 4.2))
     ax.plot(checkpoints, active_rules, label="Active rules", color="#1f77b4", linewidth=2.2)
-    ax.plot(checkpoints, created_cum, label="Cumulative created", color="#2ca02c", linestyle="--", linewidth=1.6)
-    ax.plot(checkpoints, deleted_cum, label="Cumulative deleted / merged", color="#d62728", linestyle=":", linewidth=1.8)
+    ax.plot(checkpoints, created_cum, label="Cumulative created (ID approx.)", color="#2ca02c", linestyle="--", linewidth=1.6)
+    ax.plot(checkpoints, deleted_cum, label="Cumulative deleted / merged (ID approx.)", color="#d62728", linestyle=":", linewidth=1.8)
 
     if drift_points:
         for idx, dp in enumerate(drift_points):
@@ -47,10 +48,6 @@ def plot_r1_heatmap(
     title: str = "Feature Relevance Trajectory Heatmap (R1)",
     drift_points=None,
 ):
-    """
-    Draws a heatmap of feature relevance weights over stream checkpoints.
-    weight_matrix shape: (n_checkpoints, n_features)
-    """
     W = np.asarray(weight_matrix, dtype=float)
     n_steps, n_features = W.shape
     if feature_names is None:
@@ -59,7 +56,6 @@ def plot_r1_heatmap(
     fig, ax = plt.subplots(figsize=(9.5, 4.2))
     im = ax.imshow(W.T, aspect="auto", interpolation="nearest", cmap="viridis", vmin=0.0, vmax=1.0)
 
-    # Set readable x-ticks mapped to stream checkpoints
     tick_idx = np.linspace(0, n_steps - 1, min(10, n_steps), dtype=int)
     ax.set_xticks(tick_idx)
     ax.set_xticklabels([str(checkpoints[i]) for i in tick_idx])
@@ -68,7 +64,6 @@ def plot_r1_heatmap(
 
     if drift_points:
         for dp in drift_points:
-            # Find closest checkpoint index
             pos = int(np.argmin(np.abs(np.asarray(checkpoints) - dp)))
             ax.axvline(pos, color="white", linestyle="--", linewidth=1.6)
 

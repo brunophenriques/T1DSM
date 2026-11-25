@@ -180,6 +180,8 @@ def evaluate_single_run(
     seed: int,
     checkpoint_interval: int = 50,
     track_trajectory: bool = False,
+    use_causal_scaler: bool = True,
+    first_step_zero_pred: bool = False,
 ):
     """
     Executa avaliação test-then-train medindo latência limpa (sem tracemalloc).
@@ -188,7 +190,7 @@ def evaluate_single_run(
     """
     n_samples, n_features = X.shape
     model, max_rules_val = build_model(variant, n_features, n_classes, seed)
-    scaler = FastCausalMinMaxScaler(n_features)
+    scaler = FastCausalMinMaxScaler(n_features) if use_causal_scaler else None
     preds = np.zeros(n_samples, dtype=int)
 
     prev_rule_ids = set()
@@ -202,10 +204,14 @@ def evaluate_single_run(
         xt = X[t]
         yt = int(y[t])
 
-        xt_scaled = scaler.transform_one(xt)
-        preds[t] = int(model.predict(xt_scaled.reshape(1, -1))[0])
+        xt_scaled = scaler.transform_one(xt) if scaler is not None else xt
+        if first_step_zero_pred and t == 0:
+            preds[t] = 0
+        else:
+            preds[t] = int(model.predict(xt_scaled.reshape(1, -1))[0])
 
-        scaler.learn_one(xt)
+        if scaler is not None:
+            scaler.learn_one(xt)
         model.partial_fit(xt_scaled.reshape(1, -1), np.array([yt], dtype=int))
 
         if hasattr(model, "rules"):

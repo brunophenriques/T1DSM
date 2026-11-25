@@ -1,0 +1,6 @@
+numpy
+scipy
+pandas
+matplotlib
+river==0.26.1
+pytest

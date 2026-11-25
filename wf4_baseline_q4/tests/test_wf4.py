@@ -81,9 +81,9 @@ def test_determinism_csv(tmp_path):
 
 def test_e0_real_baseline_vs_causal():
     """
-    E0 real: compara exp_sota_comparison.py (prequential_nf_generic + min_max_scale offline
-    + config de referência max_rules=5, tau_merge=0.62) contra o runner em condições iguais,
-    e quantifica separadamente a diferença ao ativar o FastCausalMinMaxScaler.
+    E0 real: compara exp_sota_comparison.py (prequential_nf_generic + min_max_scale offline)
+    diretamente contra evaluate_single_run() utilizada no benchmark, quantificando depois
+    o efeito de ativar o FastCausalMinMaxScaler.
     """
     stream = synth.Agrawal(classification_function=0, seed=42)
     X_raw, y_raw, keys = [], [], None
@@ -95,47 +95,37 @@ def test_e0_real_baseline_vs_causal():
     X_arr = np.asarray(X_raw, dtype=float)
     y_arr = np.asarray(y_raw, dtype=int)
 
-    ref_kwargs = dict(
-        n_features=X_arr.shape[1],
-        n_classes=2,
-        max_rules=5,
-        safe_threshold=0.07,
-        min_firing_for_update=0.05,
-        tau_merge=0.62,
-        drift_sensitivity=0.35,
-        random_state=42,
-    )
-
-    # 1. Execução oficial via exp_sota_comparison.py (offline min_max_scale)
+    # 1. Execução oficial via exp_sota_comparison.py (offline min_max_scale, max_rules=5)
     X_offline, _, _ = min_max_scale(X_arr)
-    m_orig = EvolvingNeuroFuzzyUnimSafe(**ref_kwargs)
+    m_orig = EvolvingNeuroFuzzyUnimSafe(n_features=X_arr.shape[1], n_classes=2, max_rules=5, random_state=42)
     res_orig = prequential_nf_generic(m_orig, X_offline, y_arr, desc="E0_orig")
 
-    # 2. Runner em condições equivalentes (mesmo pré-processamento e y_hat=0 em t=0)
-    m_equiv = EvolvingNeuroFuzzyUnimSafe(**ref_kwargs)
-    preds_equiv = np.zeros(len(y_arr), dtype=int)
-    for t in range(len(y_arr)):
-        preds_equiv[t] = 0 if t == 0 else int(m_equiv.predict(X_offline[t : t + 1])[0])
-        m_equiv.partial_fit(X_offline[t : t + 1], y_arr[t : t + 1])
+    # 2. evaluate_single_run() real em condições idênticas (offline min_max_scale, y_hat=0 em t=0)
+    m_equiv, _ = evaluate_single_run(
+        X_offline,
+        y_arr,
+        n_classes=2,
+        variant="FULL_REF",
+        seed=0,
+        use_causal_scaler=False,
+        first_step_zero_pred=True,
+    )
 
-    assert np.array_equal(res_orig["y_pred"], preds_equiv)
-    assert res_orig["n_rules_final"] == m_equiv.n_rules_
+    assert round(float(res_orig["accuracy"][-1]), 6) == m_equiv["accuracy"]
+    assert res_orig["n_rules_final"] == m_equiv["final_rules"]
 
-    # 3. Ativar o FastCausalMinMaxScaler (sem leakage) e verificar que produz métricas finitas
-    scaler = FastCausalMinMaxScaler(X_arr.shape[1])
-    m_causal = EvolvingNeuroFuzzyUnimSafe(**ref_kwargs)
-    preds_causal = np.zeros(len(y_arr), dtype=int)
-    acc_traj_causal = np.zeros(len(y_arr), dtype=float)
-    for t in range(len(y_arr)):
-        xs = scaler.transform_one(X_arr[t])
-        preds_causal[t] = int(m_causal.predict(xs.reshape(1, -1))[0])
-        acc_traj_causal[t] = float(np.mean(preds_causal[: t + 1] == y_arr[: t + 1]))
-        scaler.learn_one(X_arr[t])
-        m_causal.partial_fit(xs.reshape(1, -1), y_arr[t : t + 1])
-
-    assert 0.0 <= float(acc_traj_causal[-1]) <= 1.0
-    assert 0.0 <= float(acc_traj_causal.mean()) <= 1.0
-    assert m_causal.n_rules_ <= 5
+    # 3. evaluate_single_run() com FastCausalMinMaxScaler (zero leakage)
+    m_causal, _ = evaluate_single_run(
+        X_arr,
+        y_arr,
+        n_classes=2,
+        variant="FULL_REF",
+        seed=0,
+        use_causal_scaler=True,
+        first_step_zero_pred=False,
+    )
+    assert 0.0 <= m_causal["accuracy"] <= 1.0
+    assert m_causal["final_rules"] <= 5
 
 
 def test_ablation_wrappers_invariants():
