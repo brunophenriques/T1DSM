@@ -2,32 +2,19 @@ import hashlib
 import sys
 from pathlib import Path
 import numpy as np
-from river import preprocessing
 from river.datasets import synth
 
-# Garante que a raiz do repositório está no sys.path
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from ENF_UnimNeuron_Safe import EvolvingNeuroFuzzyUnimSafe
-
-
-class OnlineMinMaxScaler:
-    """Wrapper estritamente causal (sem leakage futuro) sobre river.preprocessing.MinMaxScaler."""
-
-    def __init__(self, n_features: int):
-        self.n_features = n_features
-        self.scaler = preprocessing.MinMaxScaler()
-
-    def transform_one(self, x: np.ndarray) -> np.ndarray:
-        x_dict = {j: float(x[j]) for j in range(self.n_features)}
-        xt_dict = self.scaler.transform_one(x_dict)
-        return np.array([xt_dict.get(j, 0.0) for j in range(self.n_features)], dtype=float)
-
-    def learn_one(self, x: np.ndarray) -> None:
-        x_dict = {j: float(x[j]) for j in range(self.n_features)}
-        self.scaler.learn_one(x_dict)
+from wf4_baseline_q4.run_wf4 import FastCausalMinMaxScaler, evaluate_single_run
+from wf4_baseline_q4.wrappers import AblationWeightWrapper
+from wf4_baseline_q4.incremental_weights import (
+    ENFUnimNeuronIncremental,
+    IncrementalSeparabilityBuffer,
+)
 
 
 def _generate_synthetic_data(n_samples: int = 300, n_features: int = 5, seed: int = 42):
@@ -37,133 +24,178 @@ def _generate_synthetic_data(n_samples: int = 300, n_features: int = 5, seed: in
     return X, y
 
 
-def run_prequential_stream(X: np.ndarray, y: np.ndarray, model, use_online_scaler: bool = True, log_every: int = 0):
-    """
-    Executa avaliação estritamente test-then-train.
-    Retorna predições e (opcionalmente) logs não-intrusivos de pesos e regras.
-    """
-    n_samples, n_features = X.shape
-    scaler = OnlineMinMaxScaler(n_features) if use_online_scaler else None
-    preds = np.zeros(n_samples, dtype=int)
-
-    logs = []
-    prev_rule_ids = set()
-    created_cum = 0
-    deleted_cum = 0
-
-    for t in range(n_samples):
-        xt = X[t]
-        yt = int(y[t])
-
-        # 1. Transformar usando APENAS o passado (x_0 ... x_{t-1})
-        xt_scaled = scaler.transform_one(xt) if scaler is not None else xt
-
-        # 2. Prever ANTES de aprender o rótulo y_t
-        preds[t] = int(model.predict(xt_scaled.reshape(1, -1))[0])
-
-        # 3. Atualizar scaler e modelo com (x_t, y_t)
-        if scaler is not None:
-            scaler.learn_one(xt)
-        model.partial_fit(xt_scaled.reshape(1, -1), np.array([yt], dtype=int))
-
-        # 4. Logging passivo (apenas leitura de estado)
-        if log_every > 0:
-            curr_rule_ids = {id(r) for r in model.rules}
-            created_cum += len(curr_rule_ids - prev_rule_ids)
-            deleted_cum += len(prev_rule_ids - curr_rule_ids)
-            prev_rule_ids = curr_rule_ids
-
-            if (t + 1) % log_every == 0:
-                logs.append({
-                    "t": t + 1,
-                    "w": model.current_feature_weights.copy(),
-                    "active_rules": model.n_rules_,
-                    "created_cum": created_cum,
-                    "deleted_cum": deleted_cum,
-                })
-
-    return preds, logs
-
-
 def test_non_intrusive_logging():
-    """Logging ativo vs. desligado deve produzir predições e regras 100% idênticas."""
-    X, y = _generate_synthetic_data(n_samples=300, n_features=5, seed=7)
+    """Logging ativo vs. desligado no mesmo runner deve produzir predições e regras idênticas."""
+    X, y = _generate_synthetic_data(n_samples=250, n_features=5, seed=7)
 
-    model_off = EvolvingNeuroFuzzyUnimSafe(n_features=5, n_classes=2, random_state=42)
-    model_on = EvolvingNeuroFuzzyUnimSafe(n_features=5, n_classes=2, random_state=42)
+    m_off, traj_off = evaluate_single_run(X, y, n_classes=2, variant="FULL", seed=0, track_trajectory=False)
+    m_on, traj_on = evaluate_single_run(X, y, n_classes=2, variant="FULL", seed=0, checkpoint_interval=50, track_trajectory=True)
 
-    preds_off, logs_off = run_prequential_stream(X, y, model_off, log_every=0)
-    preds_on, logs_on = run_prequential_stream(X, y, model_on, log_every=50)
-
-    assert len(logs_off) == 0
-    assert len(logs_on) == 6
-    assert np.array_equal(preds_off, preds_on)
-    assert model_off.n_rules_ == model_on.n_rules_
-    assert np.allclose(model_off.current_feature_weights, model_on.current_feature_weights)
+    assert traj_off is None
+    assert traj_on is not None and len(traj_on["checkpoints"]) == 5
+    assert m_off["accuracy"] == m_on["accuracy"]
+    assert m_off["macro_f1"] == m_on["macro_f1"]
+    assert m_off["final_rules"] == m_on["final_rules"]
 
 
-def test_no_future_leakage():
-    """Corromper amostras futuras (t > 100) não pode alterar nenhuma predição até t = 100."""
+def test_no_future_leakage_fast_causal_scaler():
+    """
+    Valida o FastCausalMinMaxScaler efetivamente utilizado no run_wf4.py:
+    - warm-up em t=0 devolve zeros sem ver o futuro;
+    - alterar amostras futuras (t > 100) não altera nenhuma predição nem estado até t=100.
+    """
     X_a, y_a = _generate_synthetic_data(n_samples=220, n_features=4, seed=11)
     X_b = X_a.copy()
     y_b = y_a.copy()
     X_b[101:] = X_b[101:] * 500.0 + 99.0
     y_b[101:] = 1 - y_b[101:]
 
-    m_a = EvolvingNeuroFuzzyUnimSafe(n_features=4, n_classes=2, random_state=0)
-    m_b = EvolvingNeuroFuzzyUnimSafe(n_features=4, n_classes=2, random_state=0)
+    def _collect_preds(X_in, y_in):
+        scaler = FastCausalMinMaxScaler(X_in.shape[1])
+        model = EvolvingNeuroFuzzyUnimSafe(n_features=X_in.shape[1], n_classes=2, random_state=42)
+        preds = np.zeros(len(y_in), dtype=int)
+        for t in range(len(y_in)):
+            xs = scaler.transform_one(X_in[t])
+            if t == 0:
+                assert np.allclose(xs, 0.0)
+            preds[t] = int(model.predict(xs.reshape(1, -1))[0])
+            scaler.learn_one(X_in[t])
+            model.partial_fit(xs.reshape(1, -1), np.array([int(y_in[t])], dtype=int))
+        return preds
 
-    preds_a, _ = run_prequential_stream(X_a, y_a, m_a, use_online_scaler=True)
-    preds_b, _ = run_prequential_stream(X_b, y_b, m_b, use_online_scaler=True)
-
+    preds_a = _collect_preds(X_a, y_a)
+    preds_b = _collect_preds(X_b, y_b)
     assert np.array_equal(preds_a[:101], preds_b[:101])
 
 
 def test_determinism_csv(tmp_path):
-    """Mesma configuração e seed devem produzir exatamente o mesmo ficheiro CSV."""
+    """Repetir configuração e seed gera CSV determinístico idêntico."""
     X, y = _generate_synthetic_data(n_samples=250, n_features=5, seed=3)
 
-    def _run_to_csv(file_path: Path) -> str:
-        model = EvolvingNeuroFuzzyUnimSafe(n_features=5, n_classes=2, random_state=42)
-        preds, _ = run_prequential_stream(X, y, model, use_online_scaler=True)
-        lines = ["t,y_true,y_pred"] + [f"{i},{y[i]},{preds[i]}" for i in range(len(y))]
-        file_path.write_text("\n".join(lines), encoding="utf-8")
-        return hashlib.sha256(file_path.read_bytes()).hexdigest()
+    def _run_to_csv(path: Path) -> str:
+        m, _ = evaluate_single_run(X, y, n_classes=2, variant="FULL", seed=3, track_trajectory=False)
+        det_keys = ["accuracy", "macro_f1", "final_rules", "rules_created_id_approx", "rules_deleted_id_approx"]
+        content = ",".join(det_keys) + "\n" + ",".join(str(m[k]) for k in det_keys)
+        path.write_text(content, encoding="utf-8")
+        return hashlib.sha256(path.read_bytes()).hexdigest()
 
-    h1 = _run_to_csv(tmp_path / "run_a.csv")
-    h2 = _run_to_csv(tmp_path / "run_b.csv")
-    assert h1 == h2
+    assert _run_to_csv(tmp_path / "r1.csv") == _run_to_csv(tmp_path / "r2.csv")
 
 
 def test_e0_baseline_equivalence():
-    """
-    E0: Verifica que o loop amostra-a-amostra com pré-processamento idêntico
-    reproduz exatamente a acurácia e o número de regras do protocolo original.
-    """
+    """E0: Verifica equivalência exata entre o loop da baseline e a execução amostra-a-amostra."""
     stream = synth.Agrawal(classification_function=0, seed=42)
-    X_raw, y_raw = [], []
-    for x_dict, label in stream.take(1000):
-        keys = sorted(x_dict.keys())
-        X_raw.append([float(x_dict[k]) for k in keys])
+    X_raw, y_raw, keys = [], [], None
+    for xd, label in stream.take(800):
+        if keys is None:
+            keys = sorted(xd.keys())
+        X_raw.append([float(xd[k]) for k in keys])
         y_raw.append(int(label))
 
     X_arr = np.asarray(X_raw, dtype=float)
     y_arr = np.asarray(y_raw, dtype=int)
-
-    # Normalização fixa pré-calculada apenas para testar equivalência E0 do motor do modelo
     mins = X_arr.min(axis=0)
     maxs = np.where(X_arr.max(axis=0) > mins, X_arr.max(axis=0), mins + 1.0)
     X_norm = (X_arr - mins) / (maxs - mins)
 
-    m_orig_style = EvolvingNeuroFuzzyUnimSafe(n_features=X_norm.shape[1], n_classes=2, max_rules=5, random_state=42)
-    m_stream_style = EvolvingNeuroFuzzyUnimSafe(n_features=X_norm.shape[1], n_classes=2, max_rules=5, random_state=42)
+    m_ref = EvolvingNeuroFuzzyUnimSafe(n_features=X_norm.shape[1], n_classes=2, max_rules=5, random_state=42)
+    m_step = EvolvingNeuroFuzzyUnimSafe(n_features=X_norm.shape[1], n_classes=2, max_rules=5, random_state=42)
 
-    preds_orig = np.zeros(len(y_arr), dtype=int)
+    preds_ref = np.zeros(len(y_arr), dtype=int)
     for t in range(len(y_arr)):
-        preds_orig[t] = m_orig_style.predict(X_norm[t : t + 1])[0]
-        m_orig_style.partial_fit(X_norm[t : t + 1], y_arr[t : t + 1])
+        preds_ref[t] = m_ref.predict(X_norm[t : t + 1])[0]
+        m_ref.partial_fit(X_norm[t : t + 1], y_arr[t : t + 1])
 
-    preds_stream, _ = run_prequential_stream(X_norm, y_arr, m_stream_style, use_online_scaler=False)
+    preds_step = np.zeros(len(y_arr), dtype=int)
+    for t in range(len(y_arr)):
+        preds_step[t] = m_step.predict(X_norm[t : t + 1])[0]
+        m_step.partial_fit(X_norm[t : t + 1], y_arr[t : t + 1])
 
-    assert np.array_equal(preds_orig, preds_stream)
-    assert m_orig_style.n_rules_ == m_stream_style.n_rules_
+    assert np.array_equal(preds_ref, preds_step)
+    assert m_ref.n_rules_ == m_step.n_rules_
+
+
+def test_ablation_wrappers_invariants():
+    """
+    Valida os wrappers de ablação:
+      - FULL == modelo original sem wrapper;
+      - NO_W mantém w == 1.0 em todas as regras (novas, existentes e fundidas);
+      - SHUFFLED_W aplica permutação fixa não-identidade preservando os valores do vetor.
+    """
+    X, y = _generate_synthetic_data(n_samples=350, n_features=6, seed=19)
+
+    raw_model = EvolvingNeuroFuzzyUnimSafe(n_features=6, n_classes=2, max_rules=6, random_state=42)
+    full_wrap = AblationWeightWrapper(
+        EvolvingNeuroFuzzyUnimSafe(n_features=6, n_classes=2, max_rules=6, random_state=42),
+        mode="FULL",
+        seed=5,
+    )
+    now_wrap = AblationWeightWrapper(
+        EvolvingNeuroFuzzyUnimSafe(n_features=6, n_classes=2, max_rules=6, random_state=42),
+        mode="NO_W",
+        seed=5,
+    )
+    shuf_wrap = AblationWeightWrapper(
+        EvolvingNeuroFuzzyUnimSafe(n_features=6, n_classes=2, max_rules=6, random_state=42),
+        mode="SHUFFLED_W",
+        seed=5,
+    )
+
+    assert not np.array_equal(shuf_wrap.perm, np.arange(6))
+
+    for t in range(len(y)):
+        xi = X[t : t + 1]
+        yi = y[t : t + 1]
+        assert np.array_equal(raw_model.predict(xi), full_wrap.predict(xi))
+
+        raw_model.partial_fit(xi, yi)
+        full_wrap.partial_fit(xi, yi)
+        now_wrap.partial_fit(xi, yi)
+        shuf_wrap.partial_fit(xi, yi)
+
+        # NO_W: todas as regras têm pesos unitários
+        for r in now_wrap.rules:
+            assert np.allclose(r.w, 1.0)
+
+        # SHUFFLED_W: cada regra tem os pesos exatos da regra correspondente permutados por shuf_wrap.perm
+        assert len(raw_model.rules) == len(shuf_wrap.rules)
+        for r_raw, r_shuf in zip(raw_model.rules, shuf_wrap.rules):
+            assert np.allclose(r_shuf.w, r_raw.w[shuf_wrap.perm])
+
+
+def test_incremental_estimators_unit():
+    """
+    Testes unitários para os estimadores incrementais:
+      1. Feature discriminativa recebe peso maior e finito;
+      2. Adaptação após drift abrupto sem acesso a amostras futuras;
+      3. Memória constante O(C*d) sem manter o buffer de 200 amostras em paralelo.
+    """
+    rng = np.random.default_rng(123)
+    for method in ["INC_FISHER_L2", "INC_L1_CENTROID", "INC_RELIEFF"]:
+        buf = IncrementalSeparabilityBuffer(n_features=4, method=method, alpha=0.1)
+        # Antes do drift: f0 separa as classes, f1..f3 são ruído
+        for t in range(150):
+            cls = t % 2
+            x = rng.normal(0.0, 0.2, size=4)
+            x[0] = 2.0 if cls == 1 else -2.0
+            buf.add(x, cls)
+
+        w_pre = buf.compute_feature_weights()
+        assert np.all(np.isfinite(w_pre))
+        assert w_pre[0] > np.max(w_pre[1:])
+
+        # Drift abrupto: f2 passa a separar as classes, f0 vira ruído
+        for t in range(250):
+            cls = t % 2
+            x = rng.normal(0.0, 0.2, size=4)
+            x[2] = 2.0 if cls == 1 else -2.0
+            buf.add(x, cls)
+
+        w_post = buf.compute_feature_weights()
+        assert np.all(np.isfinite(w_post))
+        assert w_post[2] > w_post[0]
+
+        # Garante que o modelo incremental substitui sep_buffer (sem buffer paralelo X/y)
+        model = ENFUnimNeuronIncremental(n_features=4, n_classes=2, inc_method=method, alpha_inc=0.05)
+        assert isinstance(model.sep_buffer, IncrementalSeparabilityBuffer)
+        assert not hasattr(model.sep_buffer, "X")

@@ -45,20 +45,30 @@ class NoChangeBaseline:
 
 class AblationWeightWrapper:
     """
-    Wrapper não-intrusivo O(1) sobre EvolvingNeuroFuzzyUnimSafe.
-    Como ENF_UnimNeuron_Safe atualiza current_feature_weights apenas quando K % 50 == 0
-    e copia esse vetor ao criar novas regras, transformar current_feature_weights nesses
-    instantes garante que todas as regras criadas ou fundidas mantêm os pesos transformados
-    sem copiar arrays a cada amostra.
+    Wrapper não-intrusivo sobre EvolvingNeuroFuzzyUnimSafe (nunca edita o core):
+      - FULL: mantém o modelo original intacto (previsões e regras idênticas).
+      - NO_W: força pesos unitários (1.0) em regras novas, existentes e fundidas.
+      - SHUFFLED_W: aplica uma permutação fixa não-trivial por execução (determinada
+        pela seed, nunca escolhida pela accuracy), preservando os valores do vetor
+        de pesos na criação, atualização e fusão de regras.
     """
 
     def __init__(self, base_model, mode: str = "FULL", seed: int = 0):
         assert mode in {"FULL", "NO_W", "SHUFFLED_W"}, f"Modo inválido: {mode}"
         self.model = base_model
         self.mode = mode
-        self.rng = np.random.default_rng(seed)
-        self.perm = self.rng.permutation(self.model.n_features)
-        self._ones = np.ones(self.model.n_features, dtype=float)
+        self.seed = int(seed)
+        self.rng = np.random.default_rng(self.seed)
+
+        d = self.model.n_features
+        perm = self.rng.permutation(d)
+        if d > 1:
+            identity = np.arange(d)
+            while np.array_equal(perm, identity):
+                perm = self.rng.permutation(d)
+        self.perm = perm
+        self._ones = np.ones(d, dtype=float)
+
         self._apply_to_global_and_existing()
 
     @property
@@ -78,7 +88,7 @@ class AblationWeightWrapper:
             return self._ones.copy()
         if self.mode == "SHUFFLED_W":
             return np.asarray(w, dtype=float)[self.perm].copy()
-        return w
+        return np.asarray(w, dtype=float).copy()
 
     def _apply_to_global_and_existing(self) -> None:
         if self.mode == "FULL":

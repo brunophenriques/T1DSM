@@ -153,12 +153,13 @@ def build_model(variant: str, n_features: int, n_classes: int, seed: int):
         base = EvolvingNeuroFuzzyUnimSafe(n_features=n_features, n_classes=n_classes, max_rules=5, random_state=42)
         return AblationWeightWrapper(base, mode="NO_W", seed=seed), 5
     if variant in {"INC_FISHER_L2", "INC_L1_CENTROID", "INC_RELIEFF"}:
+        # update_rule_weights=False isola estritamente o estimador incremental vs FeatureSeparabilityBuffer
         model = ENFUnimNeuronIncremental(
             n_features=n_features,
             n_classes=n_classes,
             inc_method=variant,
             alpha_inc=0.05,
-            update_rule_weights=True,
+            update_rule_weights=False,
             max_rules=None,
             random_state=42,
         )
@@ -179,8 +180,12 @@ def evaluate_single_run(
     seed: int,
     checkpoint_interval: int = 50,
     track_trajectory: bool = False,
-    profile_memory: bool = False,
 ):
+    """
+    Executa avaliação test-then-train medindo latência limpa (sem tracemalloc).
+    Nota: created_cum/deleted_cum baseiam-se na diferença de IDs de objetos ENFRuleSafe
+    em model.rules (aproximação não-intrusiva da atividade estrutural).
+    """
     n_samples, n_features = X.shape
     model, max_rules_val = build_model(variant, n_features, n_classes, seed)
     scaler = FastCausalMinMaxScaler(n_features)
@@ -191,8 +196,6 @@ def evaluate_single_run(
     deleted_cum = 0
     checkpoints, active_hist, created_hist, deleted_hist, weights_hist = [], [], [], [], []
 
-    if profile_memory:
-        tracemalloc.start()
     t0 = time.perf_counter()
 
     for t in range(n_samples):
@@ -219,13 +222,6 @@ def evaluate_single_run(
                 weights_hist.append(model.current_feature_weights.copy())
 
     elapsed_ms = (time.perf_counter() - t0) * 1000.0
-    if profile_memory:
-        _, peak_bytes = tracemalloc.get_traced_memory()
-        tracemalloc.stop()
-        peak_kb = round(peak_bytes / 1024.0, 2)
-    else:
-        peak_kb = np.nan
-
     acc = float(np.mean(preds == y))
     macro_f1 = compute_macro_f1(y, preds, n_classes)
 
@@ -235,11 +231,10 @@ def evaluate_single_run(
         "accuracy": round(acc, 6),
         "macro_f1": round(macro_f1, 6),
         "final_rules": int(getattr(model, "n_rules_", 0)),
-        "rules_created": int(created_cum),
-        "rules_deleted": int(deleted_cum),
-        "rule_turnover": int(created_cum + deleted_cum),
+        "rules_created_id_approx": int(created_cum),
+        "rules_deleted_id_approx": int(deleted_cum),
+        "rule_turnover_id_approx": int(created_cum + deleted_cum),
         "ms_per_sample": round(elapsed_ms / max(n_samples, 1), 4),
-        "peak_mem_kb": peak_kb,
     }
 
     traj = None
@@ -253,6 +248,24 @@ def evaluate_single_run(
         }
 
     return metrics, traj
+
+
+def measure_peak_memory_kb(X: np.ndarray, y: np.ndarray, n_classes: int, variant: str, seed: int = 0) -> float:
+    """Mede pico de memória Python via tracemalloc numa execução dedicada separada do tempo."""
+    n_samples, n_features = X.shape
+    tracemalloc.start()
+    model, _ = build_model(variant, n_features, n_classes, seed)
+    scaler = FastCausalMinMaxScaler(n_features)
+    for t in range(n_samples):
+        xt = X[t]
+        yt = int(y[t])
+        xt_scaled = scaler.transform_one(xt)
+        _ = model.predict(xt_scaled.reshape(1, -1))
+        scaler.learn_one(xt)
+        model.partial_fit(xt_scaled.reshape(1, -1), np.array([yt], dtype=int))
+    _, peak_bytes = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+    return round(peak_bytes / 1024.0, 2)
 
 
 def run_demo(config_path: str):
@@ -272,13 +285,12 @@ def run_demo(config_path: str):
         m, traj = evaluate_single_run(
             X, y, n_classes, variant=var, seed=seed,
             checkpoint_interval=interval, track_trajectory=(var == "FULL"),
-            profile_memory=False,
         )
         if var == "FULL":
             full_traj = traj
         print(
             f"  {var:<16} | Acc={m['accuracy']:.4f} | MacroF1={m['macro_f1']:.4f} | "
-            f"Rules={m['final_rules']:>3} | Turnover={m['rule_turnover']:>3} | "
+            f"Rules={m['final_rules']:>3} | Turnover~={m['rule_turnover_id_approx']:>3} | "
             f"{m['ms_per_sample']:.3f} ms/sample",
             flush=True,
         )
@@ -334,8 +346,8 @@ def run_full_sq4(out_csv: str = "wf4_baseline_q4/results/wf4_runs.csv"):
 
     fieldnames = [
         "dataset", "variant", "seed", "max_rules", "n_samples",
-        "accuracy", "macro_f1", "final_rules", "rules_created",
-        "rules_deleted", "rule_turnover", "ms_per_sample", "peak_mem_kb",
+        "accuracy", "macro_f1", "final_rules", "rules_created_id_approx",
+        "rules_deleted_id_approx", "rule_turnover_id_approx", "ms_per_sample", "peak_mem_kb",
     ]
 
     t_total = time.perf_counter()
@@ -345,16 +357,28 @@ def run_full_sq4(out_csv: str = "wf4_baseline_q4/results/wf4_runs.csv"):
 
         for ds in streams:
             print(f"\n=== Dataset: {ds} (seeds 0-9) ===", flush=True)
+            # 1. Perfilagem dedicada de memória (seed 0) separada da medição de latência
+            X0, y0, n_cls0, _, _ = load_stream(ds, seed=0)
+            mem_by_variant = {
+                var: measure_peak_memory_kb(X0, y0, n_cls0, variant=var, seed=0)
+                for var in variants
+            }
+
+            # 2. Execuções cronometradas limpas (sem tracemalloc) nas 10 seeds
             for seed in seeds:
                 t_seed = time.perf_counter()
                 X, y, n_classes, _, _ = load_stream(ds, seed=seed)
                 for var in variants:
-                    # Mede tracemalloc na seed 0 para não penalizar o tempo das outras 9 seeds
                     m, _ = evaluate_single_run(
-                        X, y, n_classes, variant=var, seed=seed,
-                        track_trajectory=False, profile_memory=(seed == 0),
+                        X, y, n_classes, variant=var, seed=seed, track_trajectory=False
                     )
-                    row = {"dataset": ds, "variant": var, "seed": seed, **m}
+                    row = {
+                        "dataset": ds,
+                        "variant": var,
+                        "seed": seed,
+                        **m,
+                        "peak_mem_kb": mem_by_variant[var] if seed == 0 else np.nan,
+                    }
                     writer.writerow(row)
                 f.flush()
                 print(f"  Completed seed {seed}/9 ({time.perf_counter() - t_seed:.1f}s)", flush=True)
