@@ -58,7 +58,8 @@ identical G before the drift.
   start to 1,000 samples after its end). If the trough is not below the threshold the ranking never
   destabilised (time 0). Otherwise restabilised = first checkpoint from the trough on where s ≥ threshold
   for 3 checkpoints in a row. Reported from the transition end (protocol convention, §10) and from the drift
-  point (as `recovery_from_dp`); identical for abrupt drift. Never restabilised → censored at the end.
+  point (as `recovery_from_dp`); identical for abrupt drift. The protocol search starts after transition
+  end; the midpoint search starts at the trough and retains signed negative offsets. Never restabilised → censored at the end.
 - **Placebo:** the same rule on S3 with a fake drift at 10,000 gives the noise floor; paired with S1/S2 by
   seed (same pre-drift data). Wilcoxon signed-rank, rank-biserial, Holm over the four tests.
 
@@ -84,7 +85,7 @@ Full numbers: [`results/table_wf5.md`](results/table_wf5.md). Figure 2b:
 
 **Restabilisation (samples).**
 
-| Stream | Trough below threshold | From transition end (protocol) | From drift point | WF2 ranking recovery (from dp) |
+| Stream | Trough below threshold | Descriptive time from transition end (protocol) | Descriptive time from drift point | WF2 ranking recovery (from dp) |
 |---|---|---|---|---|
 | S1 | 10/10 | 380 ± 95 | 380 ± 95 | 145 ± 16 |
 | S2 | 10/10 | 50 ± 0 (floor) | 330 ± 48 | 190 ± 32 |
@@ -105,13 +106,19 @@ Full numbers: [`results/table_wf5.md`](results/table_wf5.md). Figure 2b:
 - S4: weighted τ with 3 features takes only a few values; the trough equals the threshold (0.18) in every
   seed, so it never drops below it.
 
-## Decisions to approve (proposed for PROTOCOL.md §14)
+## Protocol decisions
 
-1. Window means use clean checkpoints only (the protocol's rule for stability), so the first window starts
-   at t = 200 and windows touching a transition lose checkpoints (counts in `window_means.csv`, `n_clean`).
-2. "Last window before the drift" = last window ending at or before the transition start (S2: 8,000–9,000).
-3. Restabilisation searches from the trough within 1,000 samples after the drift (the accuracy-recovery
-   construction of §10). Without it, a single noisy dip right after the transition start counted as the
-   drop and gave negative times (S2 seeds 1, 2), and late noise was taken for the drop (S2 seed 0).
-4. S3 placebo added as the noise floor of the restabilisation time.
-5. S3 re-run from `configs/protocol/` (`ref` only, since G is identical for `open`); Elec2 = WF1's no-date run.
+The five methodological choices and their motivations, classification and known timing are recorded in
+[PROTOCOL.md §14](../PROTOCOL.md#14-deviations). All remain **pending team approval**.
+No approval or protocol-freeze history is inferred.
+
+Restabilisation statuses distinguish `no_destabilisation` (no observed recovery event), `recovered`
+and `censored`; `undefined` cases carry a reason and NaN times. No-drop descriptive times remain zero,
+but `restabilised` is false. Descriptive means and paired time comparisons include these zeros;
+observed recovery means include only recovered runs. Censoring limits are separate from observed times;
+legacy `*_censored` fields retain their compatibility convention.
+
+The protocol search starts strictly after transition end (S2 floor: 50 samples). The midpoint search
+starts at the trough and may recover before the midpoint: signed negative `restab_from_dp` values
+are retained. Each search has its own status in the CSV. This measures ranking consistency, distinct
+from WF2 ranking recovery; the S2 transition-end floor does not establish faster recovery than S1.

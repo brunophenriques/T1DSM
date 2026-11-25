@@ -10,6 +10,7 @@ G (checked below); the `ref` runs are used. Writes CSVs and table_wf5.md to wf5_
 """
 import argparse, json, sys
 from pathlib import Path
+from numbers import Real
 import numpy as np
 import pandas as pd
 
@@ -34,13 +35,90 @@ STREAMS = {
 def load_runs(name):
     folder, k, role = STREAMS[name]
     runs = []
-    for sd in sorted((ROOT / folder).glob("seed_*"), key=lambda p: int(p.name.split("_")[1])):
-        z = np.load(sd / "checkpoints.npz")
-        meta = json.loads((sd / "meta.json").read_text()) if (sd / "meta.json").exists() else {}
+    base = ROOT / folder
+    paths = list(base.glob("seed_*"))
+    expected = {0} if name == "Elec2" else set(range(10))
+    found = {}
+    for sd in paths:
+        try:
+            seed = int(sd.name.removeprefix("seed_"))
+        except ValueError:
+            raise ValueError(f"{name} {sd.name}: invalid seed directory") from None
+        if seed in found:
+            raise ValueError(f"{name} seed {seed}: duplicate seed directories")
+        found[seed] = sd
+    if set(found) != expected:
+        raise ValueError(f"{name}: missing seeds {sorted(expected - set(found))}; "
+                         f"unexpected seeds {sorted(set(found) - expected)} in {base}")
+    for seed, sd in sorted(found.items()):
+        def fail(message):
+            raise ValueError(f"{name} seed {seed}: {message}")
+        for filename in ("checkpoints.npz", "meta.json"):
+            if not (sd / filename).is_file():
+                fail(f"missing required file {sd / filename}")
+        try:
+            meta = json.loads((sd / "meta.json").read_text())
+            with np.load(sd / "checkpoints.npz", allow_pickle=False) as archive:
+                z = {key: archive[key] for key in archive.files}
+            t, G = z["t"], z["G"]
+        except (ValueError, OSError, KeyError) as exc:
+            fail(f"cannot read required inputs: {exc}")
+        if not isinstance(meta, dict):
+            fail("meta.json must be a dictionary")
+        if not isinstance(meta.get("stream"), dict):
+            fail("stream must be a dictionary")
+        n_expected, d_expected = (10000, 7) if name == "Elec2" else (20000, 3 if name == "S4" else 10)
+        if meta.get("seed") != seed:
+            fail("metadata seed disagrees with directory")
+        if meta.get("n") != n_expected or meta.get("d") != d_expected:
+            fail(f"protocol requires n={n_expected}, d={d_expected}; check metadata")
+        for key in ("n", "d"):
+            if key in meta.get("stream", {}) and meta["stream"][key] != meta[key]:
+                fail(f"stream {key} disagrees with top-level metadata")
+        if t.ndim != 1 or G.shape != (len(t), d_expected):
+            fail("checkpoint t/G lengths or feature dimensions disagree")
+        if not np.all(np.isfinite(t)) or not np.all(np.diff(t) > 0):
+            fail("checkpoint times must be finite and strictly increasing")
+        if not np.array_equal(t, np.arange(50, n_expected + 1, 50)):
+            fail("checkpoint schedule must cover samples 50..n in steps of 50")
+        if "A" in z and z["A"].shape != G.shape:
+            fail("checkpoint A feature dimensions disagree with G")
+        for key, values in z.items():
+            if values.ndim and values.shape[0] != len(t):
+                fail(f"checkpoint array {key} has incompatible length")
         st = meta.get("stream", {})
         n = int(meta.get("n", z["t"][-1]))
-        dps = meta.get("drift_points") or []
-        widths = meta.get("drift_widths") or [st.get("drift_width", 0)] * len(dps)
+        # Explicit empty lists identify stationary/no-ground-truth runs. Missing
+        # fields must never silently suppress a drift stream's analysis.
+        dps = meta.get("drift_points")
+        widths = meta.get("drift_widths")
+        def finite_number(value):
+            return isinstance(value, Real) and not isinstance(value, bool) and np.isfinite(value)
+        if not isinstance(dps, list) or not all(finite_number(dp) for dp in dps):
+            fail("drift_points must be an explicit list of finite numbers")
+        if any(not 0 < dp < n for dp in dps) or any(b <= a for a, b in zip(dps, dps[1:])):
+            fail("drift_points must be strictly ordered and inside the stream (0, n)")
+        if name in ("S1", "S2", "S4") and not dps:
+            fail("drift_points must not be empty for a drift stream")
+        if name in ("S3", "Elec2") and dps:
+            fail("drift_points must be empty for stationary S3 / no-ground-truth Elec2")
+        if (not isinstance(widths, list) or len(widths) != len(dps)
+                or not all(finite_number(w) and w >= 0 for w in widths)):
+            fail("drift_widths must be an explicit list of finite nonnegative numbers matching drift_points")
+        if any(dp - w / 2 < 0 or dp + w / 2 > n for dp, w in zip(dps, widths)):
+            fail("drift_widths place a transition outside the stream")
+        if "drift_at" in st:
+            drift_at = st["drift_at"]
+            if drift_at is not None and not finite_number(drift_at):
+                fail("stream.drift_at must be a finite number or null")
+            if dps != ([] if drift_at is None else [drift_at]):
+                fail("drift_points disagree with stream.drift_at")
+        if "drift_width" in st:
+            width = st["drift_width"]
+            if not finite_number(width) or width < 0:
+                fail("stream.drift_width must be finite and nonnegative")
+            if any(w != width for w in widths):
+                fail("drift_widths disagree with stream.drift_width")
         names = ELEC2_NAMES if name == "Elec2" else [f"x{i}" for i in range(z["G"].shape[1])]
         runs.append(dict(seed=int(sd.name.split("_")[1]), t=z["t"], G=z["G"], n=n, dps=dps, widths=widths,
                          names=names, rel_before=st.get("rel_before"), rel_after=st.get("rel_after"),
@@ -56,9 +134,9 @@ def _wf2_recovery(sd):
     return {k: d.get(k) for k in ("recovery/G/drift1", "recovery_from_dp/G/drift1")}
 
 
-def check_variants_identical():
+def check_variants_identical(names=None):
     for name, (folder, _, _) in STREAMS.items():
-        if not folder.endswith("/ref"):
+        if (names is not None and name not in names) or not folder.endswith("/ref"):
             continue
         o = ROOT / folder.replace("/ref", "/open")
         if not o.exists():
@@ -149,13 +227,22 @@ def write_table(per_run, restab, path):
               f"{CONSECUTIVE} checkpoints in a row, counted from the trough "
               "(minimum within 1,000 samples after the drift, as for accuracy recovery in §10). The S3 placebo row applies the "
               "same rule to the stationary stream with a fake drift at 10,000: it is the noise floor of the time.", "",
-              "| Stream | Threshold (wτ) | Dropped | Restabilised | From transition end (protocol) | From drift point | WF2 ranking recovery (from dp) |",
-              "|---|---|---|---|---|---|---|"]
+              "| Stream | Threshold (wτ) | Dropped | Recovered after drop | Right-censored | No destabilisation | Undefined | Descriptive time from transition end | Descriptive time from drift point | Observed recovery from drift point | WF2 ranking recovery (from dp) |",
+              "|---|---|---|---|---|---|---|---|---|---|---|"]
         for s, g in restab.groupby("stream", sort=False):
             L.append(f"| {s} | {fmt(g.threshold)} | {int(g.dropped.sum())}/{len(g)} | {int(g.restabilised.sum())}/{len(g)} | "
-                     f"{fmt(g.restab, 0)} | {fmt(g.restab_from_dp, 0)} | {fmt(g.wf2_ranking_recovery_from_dp, 0)} |")
-        L += ["", "Censored runs (never back above the threshold) are NaN in the means; their lower bound is in "
-              "`restab_per_run.csv` (`restab_censored`)."]
+                     f"{int((g.restab_status == 'censored').sum())}/{len(g)} | "
+                     f"{int((g.restab_status == 'no_destabilisation').sum())}/{len(g)} | "
+                     f"{int((g.restab_status == 'undefined').sum())}/{len(g)} | "
+                     f"{fmt(g.restab, 0)} | {fmt(g.restab_from_dp, 0)} | "
+                     f"{fmt(g.loc[g.restab_from_dp_status == 'recovered', 'restab_from_dp'], 0)} | "
+                     f"{fmt(g.get('wf2_ranking_recovery_from_dp', []), 0)} |")
+        L += ["", "Descriptive times include zero-time no-destabilisation cases; these are not observed recoveries. "
+              "Observed recovery means include recovered cases only. Status counts use the transition-end search; "
+              "midpoint statuses are recorded separately in the CSV. Midpoint offsets may be negative. "
+              "Paired time tests retain the descriptive zero-time convention. "
+              "Censored and undefined runs are NaN in means; censoring limits are separately recorded in "
+              "`restab_per_run.csv` (`restab_censor_limit` and `restab_from_dp_censor_limit`)."]
         plac = restab[restab.stream.str.startswith("S3 placebo")].sort_values("seed")
         tests = []
         for st in ("S1", "S2"):
@@ -177,7 +264,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--streams", nargs="*", default=list(STREAMS), choices=list(STREAMS))
     a = ap.parse_args()
-    check_variants_identical()
+    # Validate every requested stream before writing any summaries.
+    for name in a.streams:
+        load_runs(name)
+    check_variants_identical(a.streams)
     OUT.mkdir(parents=True, exist_ok=True)
     per_run, pairs, means, restab = analyse(a.streams)
     tag = "" if a.streams == list(STREAMS) else "_" + "_".join(a.streams)
