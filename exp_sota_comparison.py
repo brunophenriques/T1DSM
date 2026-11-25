@@ -107,6 +107,7 @@ try:
     HAS_ENF_ADVANCED = True
 except Exception:
     HAS_ENF_ADVANCED = False
+    
 try:
     from enfs_uni0_evolving import ENFSUni0Evolving
 except ImportError:
