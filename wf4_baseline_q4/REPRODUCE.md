@@ -15,10 +15,9 @@ Timed execution command used on Windows CMD:
 python -c "import time, runpy; t0=time.perf_counter(); runpy.run_path('exp_sota_comparison.py', run_name='__main__'); dt=time.perf_counter()-t0; print(f'\nTotal runtime: {dt:.2f}s ({dt/60:.2f} min)')"
 ```
 
-## 3. Measured Runtime
-- **Total wall-clock runtime (all 8 datasets $\times$ 7 models = 56 runs):** `692.08s` (`11.53 min`)
-- **`ENF_Unim_Safe` runtime range:** `0.4s` (`Phishing_real`, $N=1{,}250$) to `17.4s` (`Sine_synth`, $N=40{,}000$)
-- **`ENF_Unim_PA` runtime range:** `0.5s` (`Phishing_real`, $N=1{,}250$) to `21.0s` (`Sine_synth`, $N=40{,}000$)
+## 3. E0 Baseline Equivalence & Normalization Comparison
+- **Exact E0 Equivalence:** Running `EvolvingNeuroFuzzyUnimSafe` with `exp_sota_comparison.py` reference parameters (`max_rules=5, safe_threshold=0.07, min_firing_for_update=0.05, tau_merge=0.62, drift_sensitivity=0.35`), offline `min_max_scale`, and `y_hat=0` at `t=0` yields identical sample-by-sample predictions and final rule counts between `prequential_nf_generic` and the WF4 runner.
+- **Causal Normalization Impact (`FastCausalMinMaxScaler`):** Replacing offline global `min_max_scale` with strictly causal online scaling (`FastCausalMinMaxScaler`, zero future leakage) on `Agrawal(seed=42, N=1000)` shifts final accuracy from `0.6040` to `0.6020` (`-0.20` p.p.) and mean cumulative trajectory accuracy from `0.6107` to `0.6062` (`-0.45` p.p.), preserving `5` active rules.
 
 ## 4. UnimNeuron Comparison vs. `results_exp/exp_stream_summary.tex`
 

@@ -20,6 +20,7 @@ def rank_biserial_paired(x: np.ndarray, y: np.ndarray) -> float:
 
 
 def holm_bonferroni(p_vals: list[float]) -> list[float]:
+    """Calcula Holm-Bonferroni sobre p-valores completos sem arredondamento prévio."""
     m = len(p_vals)
     order = np.argsort(p_vals)
     adj = np.empty(m, dtype=float)
@@ -31,86 +32,154 @@ def holm_bonferroni(p_vals: list[float]) -> list[float]:
     return adj.tolist()
 
 
-def compare_pair_across_streams(df: pd.DataFrame, var_a: str, var_b: str, metric: str = "accuracy", streams=None):
-    if streams is None:
-        streams = ["S1", "S2", "S3", "S4", "Elec2"]
+def compare_synthetic_paired(
+    df: pd.DataFrame,
+    family: str,
+    var_a: str,
+    var_b: str,
+    metric: str = "accuracy",
+    synth_streams=None,
+) -> pd.DataFrame:
+    if synth_streams is None:
+        synth_streams = ["S1", "S2", "S3", "S4"]
 
+    expected_seeds = list(range(10))
     rows = []
-    for ds in streams:
-        sub = df[df["dataset"] == ds]
-        a = sub[sub["variant"] == var_a].sort_values("seed")[metric].to_numpy()
-        b = sub[sub["variant"] == var_b].sort_values("seed")[metric].to_numpy()
-        assert len(a) == 10 and len(b) == 10, f"Expected 10 paired seeds for {ds} ({var_a} vs {var_b})"
+    raw_pvals = []
 
+    for ds in synth_streams:
+        sub_a = df[(df["dataset"] == ds) & (df["variant"] == var_a)][
+            ["dataset", "seed", "max_rules", metric]
+        ].copy()
+        sub_b = df[(df["dataset"] == ds) & (df["variant"] == var_b)][
+            ["dataset", "seed", "max_rules", metric]
+        ].copy()
+
+        assert not sub_a.isna().any().any() or sub_a["max_rules"].isna().all()
+        assert not sub_b.isna().any().any() or sub_b["max_rules"].isna().all()
+
+        merged = pd.merge(
+            sub_a, sub_b, on=["dataset", "seed"], suffixes=("_A", "_B"), validate="one_to_one"
+        ).sort_values("seed")
+
+        assert list(merged["seed"]) == expected_seeds, f"Seeds em falta em {ds} ({var_a} vs {var_b})"
+        assert (
+            merged["max_rules_A"].fillna("None").equals(merged["max_rules_B"].fillna("None"))
+        ), f"Configuração max_rules diferente em {ds} ({var_a} vs {var_b})"
+
+        a = merged[f"{metric}_A"].to_numpy(dtype=float)
+        b = merged[f"{metric}_B"].to_numpy(dtype=float)
         diff = a - b
+
         if np.allclose(diff, 0.0):
             stat, p_val, r_rb = 0.0, 1.0, 0.0
         else:
             stat, p_val = wilcoxon(a, b, alternative="two-sided", zero_method="wilcox")
             r_rb = rank_biserial_paired(a, b)
 
+        raw_pvals.append(float(p_val))
         scale = 100.0 if metric in {"accuracy", "macro_f1"} else 1.0
         rows.append({
+            "family": family,
             "comparison": f"{var_a} vs {var_b}",
             "metric": metric,
             "dataset": ds,
-            "mean_A": round(a.mean() * scale, 4),
-            "std_A": round(a.std(ddof=1) * scale, 4),
-            "mean_B": round(b.mean() * scale, 4),
-            "std_B": round(b.std(ddof=1) * scale, 4),
-            "delta": round((a.mean() - b.mean()) * scale, 4),
+            "mean_A": a.mean() * scale,
+            "std_A": a.std(ddof=1) * scale,
+            "mean_B": b.mean() * scale,
+            "std_B": b.std(ddof=1) * scale,
+            "delta": (a.mean() - b.mean()) * scale,
             "W_stat": float(stat),
-            "p_raw": round(float(p_val), 4),
-            "r_rb": round(float(r_rb), 4),
+            "p_raw": float(p_val),
+            "r_rb": float(r_rb),
         })
 
-    res_df = pd.DataFrame(rows)
-    res_df["p_holm"] = [round(p, 4) for p in holm_bonferroni(res_df["p_raw"].tolist())]
-    return res_df
+    # Holm calculado antes de qualquer arredondamento
+    adj_pvals = holm_bonferroni(raw_pvals)
+    for row, p_adj in zip(rows, adj_pvals):
+        row["p_holm"] = p_adj
+
+    return pd.DataFrame(rows)
+
+
+def summarize_elec2_descriptive(df: pd.DataFrame) -> pd.DataFrame:
+    sub = df[df["dataset"] == "Elec2"].copy()
+    rows = []
+    for var, grp in sub.groupby("variant", sort=False):
+        acc_pct = grp["accuracy"].to_numpy(dtype=float) * 100.0
+        f1_pct = grp["macro_f1"].to_numpy(dtype=float) * 100.0
+        lat = grp["ms_per_sample"].to_numpy(dtype=float)
+        mem = grp["peak_mem_kb"].dropna().to_numpy(dtype=float)
+        rows.append({
+            "variant": var,
+            "acc_mean_pct": float(acc_pct.mean()),
+            "acc_std_perm_pct": float(acc_pct.std(ddof=1)),
+            "macro_f1_mean_pct": float(f1_pct.mean()),
+            "final_rules": int(grp["final_rules"].iloc[0]),
+            "ms_per_sample_mean": float(lat.mean()),
+            "ms_per_sample_std": float(lat.std(ddof=1)),
+            "peak_mem_kb_seed0": float(mem[0]) if len(mem) > 0 else np.nan,
+        })
+    return pd.DataFrame(rows)
 
 
 def run_all_q4_stats(results_csv: str = "wf4_baseline_q4/results/wf4_runs.csv"):
     df = pd.read_csv(results_csv)
-    streams = ["S1", "S2", "S3", "S4", "Elec2"]
+    synth_streams = ["S1", "S2", "S3", "S4"]
 
-    # 1. Primary SQ4: FULL vs SHUFFLED_W (max_rules=None)
-    sq4_df = compare_pair_across_streams(df, "FULL", "SHUFFLED_W", metric="accuracy", streams=streams)
-    print("\n=== 1. PRIMARY SQ4: FULL vs. SHUFFLED_W (max_rules=None, Information Content) ===")
-    print(sq4_df.to_string(index=False))
+    # Família 1 (Primária): SQ4 em S1-S4 (max_rules=None)
+    sq4_df = compare_synthetic_paired(
+        df, family="SQ4_primary", var_a="FULL", var_b="SHUFFLED_W", metric="accuracy", synth_streams=synth_streams
+    )
+    print("\n=== 1. PRIMARY SQ4 (Synthetic S1-S4, Paired by Seed, max_rules=None) ===")
+    print(sq4_df.round(4).to_string(index=False))
 
-    # 2. Scale control on reference config: FULL_REF vs NO_W_REF (max_rules=5)
-    scale_df = compare_pair_across_streams(df, "FULL_REF", "NO_W_REF", metric="accuracy", streams=streams)
-    print("\n=== 2. SCALE CONTROL: FULL_REF vs. NO_W_REF (max_rules=5, Weight Scale Test) ===")
-    print(scale_df.to_string(index=False))
+    # Família 2 (Secundária): Controlo de Escala (max_rules=5)
+    scale_df = compare_synthetic_paired(
+        df, family="SQ4_scale_control", var_a="FULL_REF", var_b="NO_W_REF", metric="accuracy", synth_streams=synth_streams
+    )
+    print("\n=== 2. SECONDARY SCALE CONTROL (Synthetic S1-S4, max_rules=5) ===")
+    print(scale_df.round(4).to_string(index=False))
 
-    # 3. Incremental Feature-Distance Variants vs FULL (Accuracy & Latency)
+    # Família 3 (Exploratória): Estimadores Incrementais vs FULL (Accuracy e Latência)
     inc_dfs = []
     for inc_var in ["INC_FISHER_L2", "INC_L1_CENTROID", "INC_RELIEFF"]:
-        for m in ["accuracy", "ms_per_sample"]:
-            inc_dfs.append(compare_pair_across_streams(df, inc_var, "FULL", metric=m, streams=streams))
+        inc_dfs.append(
+            compare_synthetic_paired(
+                df, family=f"INC_{inc_var}_acc", var_a=inc_var, var_b="FULL", metric="accuracy", synth_streams=synth_streams
+            )
+        )
+        inc_dfs.append(
+            compare_synthetic_paired(
+                df, family=f"INC_{inc_var}_lat", var_a=inc_var, var_b="FULL", metric="ms_per_sample", synth_streams=synth_streams
+            )
+        )
     inc_all = pd.concat(inc_dfs, ignore_index=True)
-    print("\n=== 3. INCREMENTAL FEATURE-DISTANCE VARIANTS vs. FULL (Accuracy) ===")
-    print(inc_all[inc_all["metric"] == "accuracy"].to_string(index=False))
+    print("\n=== 3. INCREMENTAL ESTIMATORS vs FULL (Synthetic S1-S4, Accuracy) ===")
+    print(inc_all[inc_all["metric"] == "accuracy"].round(4).to_string(index=False))
 
-    # 4. Peak Memory Profile (seed 0)
-    mem_df = df[df["seed"] == 0].pivot(index="dataset", columns="variant", values="peak_mem_kb")
-    print("\n=== 4. PEAK MEMORY (KB, tracemalloc on seed 0) ===")
-    print(mem_df.round(2).to_string())
+    # Resumo Descritivo Elec2 (sem inferência de 10 seeds sobre a mesma stream real)
+    elec2_df = summarize_elec2_descriptive(df)
+    print("\n=== 4. ELEC2 DESCRIPTIVE SUMMARY (Fixed Real Stream; std = permutation variability for SHUFFLED_W) ===")
+    print(elec2_df.round(4).to_string(index=False))
 
-    # Save full statistical summary
-    summary_out = Path("wf4_baseline_q4/results/sq4_summary_stats.csv")
-    pd.concat([sq4_df, scale_df, inc_all], ignore_index=True).to_csv(summary_out, index=False)
-    print(f"\nFull statistical summary saved to: {summary_out}")
+    out_dir = Path("wf4_baseline_q4/results")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    pd.concat([sq4_df, scale_df, inc_all], ignore_index=True).to_csv(out_dir / "sq4_summary_stats.csv", index=False)
+    elec2_df.to_csv(out_dir / "elec2_descriptive_summary.csv", index=False)
 
-    # Print ready-to-paste LaTeX row for Table 1 (SQ4)
     mean_delta = sq4_df["delta"].mean()
     sig_count = int((sq4_df["p_holm"] < 0.05).sum())
     med_r = sq4_df["r_rb"].median()
+    elec_full = float(elec2_df.loc[elec2_df["variant"] == "FULL", "acc_mean_pct"].iloc[0])
+    elec_shuf = float(elec2_df.loc[elec2_df["variant"] == "SHUFFLED_W", "acc_mean_pct"].iloc[0])
+
     print("\n=== LaTeX Row for Table 1 (SQ4) ===")
     print(
         f"SQ4 (Info. Content) & FULL vs. SHUFFLED\\_W ($K=\\infty$) & "
-        f"$\\Delta\\text{{Acc}} = {mean_delta:+.2f}\\%$ & "
-        f"{sig_count}/{len(streams)} sig. ($p_{{\\text{{Holm}}}} < 0.05$, median $r = {med_r:.2f}$) \\\\"
+        f"$\\Delta\\text{{Acc}}_{{\\text{{synth}}}} = {mean_delta:+.2f}\\%$ & "
+        f"{sig_count}/{len(synth_streams)} sig. ($p_{{\\text{{Holm}}}} < 0.05$, med. $r = {med_r:.2f}$; "
+        f"Elec2: {elec_full:.2f}\\% vs. {elec_shuf:.2f}\\%) \\\\"
     )
 
 
