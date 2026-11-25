@@ -108,9 +108,9 @@ try:
 except Exception:
     HAS_ENF_ADVANCED = False
 try:
-    from enfs_uni0_evolving import ENFS_Uni0_Evolving
+    from enfs_uni0_evolving import ENFSUni0Evolving
 except ImportError:
-    ENFS_Uni0_Evolving = None
+    ENFSUni0Evolving = None
 
 # Optional: UnimNeuron-based variants (if present in repository)
 try:
