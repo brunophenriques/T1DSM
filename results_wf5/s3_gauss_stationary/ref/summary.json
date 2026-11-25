@@ -1,0 +1,286 @@
+{
+  "config": {
+    "name": "s3_gauss_stationary",
+    "note": "S3: S1's first concept only (stationary control, SQ1 sanity check).",
+    "role": "predictive",
+    "seeds": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9
+    ],
+    "stream": {
+      "type": "gauss_shift",
+      "delta": 0.3,
+      "sd": 0.12,
+      "n": 20000,
+      "d": 10,
+      "rel_before": [
+        0,
+        1,
+        2
+      ],
+      "rel_after": [
+        5,
+        6,
+        7
+      ],
+      "drift_at": null,
+      "drift_width": 0
+    },
+    "variants": {
+      "ref": {
+        "max_rules": 5,
+        "tau_merge": 0.62,
+        "safe_threshold": 0.07,
+        "min_firing_for_update": 0.05,
+        "drift_sensitivity": 0.35
+      },
+      "open": {
+        "max_rules": null,
+        "tau_merge": 0.62,
+        "safe_threshold": 0.07,
+        "min_firing_for_update": 0.05,
+        "drift_sensitivity": 0.35
+      }
+    },
+    "checkpoint_every": 50,
+    "acc_window": 500,
+    "analysis": {
+      "lags_samples": [
+        50,
+        200,
+        500,
+        2000
+      ],
+      "topk": 3,
+      "recovery_precision": 1.0,
+      "recovery_consecutive": 3,
+      "warmup_flush": 200,
+      "acc_tol": 0.02,
+      "acc_pre_samples": 1000,
+      "acc_consecutive": 3,
+      "acc_trough_samples": 1000
+    },
+    "outdir": "results_protocol"
+  },
+  "variant": "ref",
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+  ],
+  "summary": {
+    "acc_final": {
+      "mean": 0.508145,
+      "std": 0.009606910273339682,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "f1_final": {
+      "mean": 0.5013450732667313,
+      "std": 0.003722433457181684,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "frac_constant/A": {
+      "mean": 0.601,
+      "std": 0.4886732036852441,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "frac_constant/G": {
+      "mean": 0.0,
+      "std": 0.0,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "log_time_s": {
+      "mean": 0.355433408531826,
+      "std": 0.05766084264408246,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "n_checkpoints": {
+      "mean": 400.0,
+      "std": 0.0,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "proc_time_s": {
+      "mean": 17.373500091471943,
+      "std": 3.349493080292218,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "rules_final": {
+      "mean": 5.0,
+      "std": 0.0,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "stab/A/jaccard/lag200": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 4,
+      "n_seeds": 10
+    },
+    "stab/A/jaccard/lag2000": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 4,
+      "n_seeds": 10
+    },
+    "stab/A/jaccard/lag50": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 4,
+      "n_seeds": 10
+    },
+    "stab/A/jaccard/lag500": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 4,
+      "n_seeds": 10
+    },
+    "stab/A/tau_b/lag200": {
+      "mean": 0.9999999999999999,
+      "std": 0.0,
+      "n_valid": 4,
+      "n_seeds": 10
+    },
+    "stab/A/tau_b/lag2000": {
+      "mean": 0.9999999999999999,
+      "std": 0.0,
+      "n_valid": 4,
+      "n_seeds": 10
+    },
+    "stab/A/tau_b/lag50": {
+      "mean": 0.9999999999999999,
+      "std": 0.0,
+      "n_valid": 4,
+      "n_seeds": 10
+    },
+    "stab/A/tau_b/lag500": {
+      "mean": 0.9999999999999999,
+      "std": 0.0,
+      "n_valid": 4,
+      "n_seeds": 10
+    },
+    "stab/G/jaccard/lag200": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "stab/G/jaccard/lag2000": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "stab/G/jaccard/lag50": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "stab/G/jaccard/lag500": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "stab/G/tau_b/lag200": {
+      "mean": 0.4688606163415324,
+      "std": 0.008854203532038694,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "stab/G/tau_b/lag2000": {
+      "mean": 0.46446311858076567,
+      "std": 0.008450041526738044,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "stab/G/tau_b/lag50": {
+      "mean": 0.6386756453423119,
+      "std": 0.0059872519710782906,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "stab/G/tau_b/lag500": {
+      "mean": 0.4702842377260982,
+      "std": 0.009349878280092842,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "struct/created_total": {
+      "mean": 12.9,
+      "std": 6.949100661236677,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "struct/removed_total": {
+      "mean": 7.9,
+      "std": 6.949100661236677,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "struct/rules_mean": {
+      "mean": 5.0,
+      "std": 0.0,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "valid/A/auc/seg0": {
+      "mean": 0.7,
+      "std": 0.24494897427831783,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "valid/A/prec_at_k/seg0": {
+      "mean": 0.5799999999999998,
+      "std": 0.342928563989645,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "valid/G/auc/seg0": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "valid/G/prec_at_k/seg0": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "var/A/seg0": {
+      "mean": 2.6723223961115726e-06,
+      "std": 7.441579526492671e-06,
+      "n_valid": 10,
+      "n_seeds": 10
+    },
+    "var/G/seg0": {
+      "mean": 0.0027039255906937377,
+      "std": 0.0001691458264603701,
+      "n_valid": 10,
+      "n_seeds": 10
+    }
+  }
+}

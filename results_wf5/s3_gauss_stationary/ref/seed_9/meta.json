@@ -1,0 +1,59 @@
+{
+  "config_name": "s3_gauss_stationary",
+  "config_file": "configs/protocol/s3_gauss_stationary.json",
+  "variant": "ref",
+  "seed": 9,
+  "model_params": {
+    "max_rules": 5,
+    "tau_merge": 0.62,
+    "safe_threshold": 0.07,
+    "min_firing_for_update": 0.05,
+    "drift_sensitivity": 0.35
+  },
+  "stream": {
+    "family": "gauss_shift",
+    "n": 20000,
+    "d": 10,
+    "drift_at": null,
+    "drift_width": 0,
+    "rel_before": [
+      0,
+      1,
+      2
+    ],
+    "rel_after": [
+      5,
+      6,
+      7
+    ],
+    "delta": 0.3,
+    "sd": 0.12,
+    "label_noise": 0.0,
+    "seed": 9
+  },
+  "n": 20000,
+  "d": 10,
+  "drift_points": [],
+  "drift_widths": [],
+  "rule_events_final": {
+    "ev_created": 19551,
+    "ev_pruned": 19546,
+    "ev_newborn_pruned": 19540,
+    "ev_merged": 0
+  },
+  "started_utc": "2026-11-24T20:29:08+00:00",
+  "proc_time_s": 11.829889497486874,
+  "log_time_s": 0.27622860250994563,
+  "git": {
+    "commit": "b3c07e4fe8de4d33ea95356667d16497f49cc145",
+    "branch": "experiment_mines/wf5-windows",
+    "uncommitted_changes": false
+  },
+  "versions": {
+    "python": "3.11.9",
+    "numpy": "2.2.6",
+    "scipy": "1.17.1",
+    "matplotlib": "3.11.2",
+    "river": "0.27.0"
+  }
+}
