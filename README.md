@@ -72,15 +72,9 @@ python exp_ablation.py
 
 ---
 
-```markdown
-
 ## How to run T17 (Workflow 4: SQ4 & Incremental Feature Distances)
 
-### Installation
-```bash
-pip install -r wf4_baseline_q4/requirements.txt
-# Or reproduce the exact Conda snapshot:
-# conda create -n AC2 --file wf4_baseline_q4/env.txt
+See [`wf4_baseline_q4/README.md`](wf4_baseline_q4/README.md) for installation, E0 equivalence, demo, benchmark, and statistical reproduction instructions.
 
 ## 🔍 Interpretability & Rules
 
