@@ -2,7 +2,7 @@ numpy
 scipy
 pandas
 matplotlib
-river==0.26.1
-pytest
 tqdm
-evolvingfuzzysystems==0.1.5
+river==0.26.1
+evolvingfuzzysystems
+pytest

@@ -156,7 +156,7 @@ def test_ablation_wrappers_invariants():
         seed=5,
     )
 
-    assert not np.array_equal(shuf_wrap.perm, np.arange(6))
+    assert np.all(shuf_wrap.perm != np.arange(6))
 
     for t in range(len(y)):
         xi = X[t : t + 1]

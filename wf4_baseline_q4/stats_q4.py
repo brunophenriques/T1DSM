@@ -7,16 +7,18 @@ import pandas as pd
 from scipy.stats import wilcoxon
 
 
-def rank_biserial_paired(x: np.ndarray, y: np.ndarray) -> float:
-    """Matched-pairs rank-biserial correlation r = (W+ - W-) / (W+ + W-)."""
+def rank_biserial_paired(x: np.ndarray, y: np.ndarray) -> tuple[float, int]:
+    """Matched-pairs rank-biserial correlation r = (W+ - W-) / (W+ + W-) e contagem de pares não nulos."""
     diff = x - y
     diff = diff[~np.isclose(diff, 0.0)]
-    if len(diff) == 0:
-        return 0.0
+    n_nonzero = int(len(diff))
+    if n_nonzero == 0:
+        return np.nan, 0
     ranks = pd.Series(np.abs(diff)).rank().to_numpy()
     w_plus = float(ranks[diff > 0].sum())
     w_minus = float(ranks[diff < 0].sum())
-    return (w_plus - w_minus) / (w_plus + w_minus)
+    r_rb = (w_plus - w_minus) / (w_plus + w_minus)
+    return float(r_rb), n_nonzero
 
 
 def holm_bonferroni(p_vals: list[float]) -> list[float]:
@@ -61,6 +63,27 @@ def validate_runs_dataframe(df: pd.DataFrame) -> None:
         assert sorted(grp["seed"].tolist()) == expected_seeds, f"Seeds incompletas em {ds} / {var}"
 
 
+def evaluate_predictive_eligibility(df: pd.DataFrame, min_margin_pp: float = 2.0) -> pd.DataFrame:
+    """Critério pré-especificado: FULL deve superar MajorityClass e NoChange em > min_margin_pp p.p."""
+    rows = []
+    for ds, grp in df.groupby("dataset", sort=False):
+        acc_full = float(grp[grp["variant"] == "FULL"]["accuracy"].mean() * 100.0)
+        acc_maj = float(grp[grp["variant"] == "MajorityClass"]["accuracy"].mean() * 100.0)
+        acc_nc = float(grp[grp["variant"] == "NoChange"]["accuracy"].mean() * 100.0)
+        best_trivial = max(acc_maj, acc_nc)
+        margin_pp = acc_full - best_trivial
+        rows.append({
+            "dataset": ds,
+            "full_acc_pct": acc_full,
+            "majority_acc_pct": acc_maj,
+            "nochange_acc_pct": acc_nc,
+            "best_trivial_pct": best_trivial,
+            "margin_vs_trivial_pp": margin_pp,
+            "eligible_sq4": bool(margin_pp > min_margin_pp),
+        })
+    return pd.DataFrame(rows)
+
+
 def compare_synthetic_paired(
     df: pd.DataFrame,
     family: str,
@@ -69,6 +92,7 @@ def compare_synthetic_paired(
     expected_max_rules,
     metric: str = "accuracy",
     synth_streams=None,
+    min_nonzero_for_rrb: int = 5,
 ) -> pd.DataFrame:
     if synth_streams is None:
         synth_streams = ["S1", "S2", "S3", "S4"]
@@ -96,10 +120,11 @@ def compare_synthetic_paired(
         diff = a - b
 
         if np.allclose(diff, 0.0):
-            stat, p_val, r_rb = 0.0, 1.0, 0.0
+            stat, p_val, r_rb, n_nonzero = 0.0, 1.0, np.nan, 0
         else:
             stat, p_val = wilcoxon(a, b, alternative="two-sided", zero_method="wilcox")
-            r_rb = rank_biserial_paired(a, b)
+            r_rb_raw, n_nonzero = rank_biserial_paired(a, b)
+            r_rb = r_rb_raw if n_nonzero >= min_nonzero_for_rrb else np.nan
 
         raw_pvals.append(float(p_val))
         scale = 100.0 if metric in {"accuracy", "macro_f1"} else 1.0
@@ -114,9 +139,10 @@ def compare_synthetic_paired(
             "mean_B": b.mean() * scale,
             "std_B": b.std(ddof=1) * scale,
             "delta": (a.mean() - b.mean()) * scale,
+            "n_nonzero": n_nonzero,
             "W_stat": float(stat),
             "p_raw": float(p_val),
-            "r_rb": float(r_rb),
+            "r_rb": r_rb,
         })
 
     adj_pvals = holm_bonferroni(raw_pvals)
@@ -174,24 +200,30 @@ def run_all_q4_stats(results_csv: str = "wf4_baseline_q4/results/wf4_runs.csv"):
     validate_runs_dataframe(df)
     synth_streams = ["S1", "S2", "S3", "S4"]
 
-    # Família 1 (Primária): SQ4 em S1-S4 (max_rules=None)
+    # 0. Critério pré-especificado de elegibilidade preditiva (> +2.0 p.p. acima de MajorityClass e NoChange)
+    elig_df = evaluate_predictive_eligibility(df, min_margin_pp=2.0)
+    n_eligible = int(elig_df["eligible_sq4"].sum())
+    print("\n=== 0. PREDICTIVE ELIGIBILITY GATE (FULL > max(MajorityClass, NoChange) + 2.0 p.p.) ===")
+    print(elig_df.round(4).to_string(index=False))
+
+    # 1. Análise diagnóstica em S1-S4 (max_rules=None)
     sq4_df = compare_synthetic_paired(
-        df, family="SQ4_primary", var_a="FULL", var_b="SHUFFLED_W", expected_max_rules=None, metric="accuracy", synth_streams=synth_streams
+        df, family="SQ4_diagnostic_all_synth", var_a="FULL", var_b="SHUFFLED_W", expected_max_rules=None, metric="accuracy", synth_streams=synth_streams
     )
-    print("\n=== 1. PRIMARY SQ4 (Synthetic S1-S4, Paired by Seed, max_rules=None) ===")
+    print("\n=== 1. DIAGNOSTIC SQ4 (Synthetic S1-S4, Paired by Seed, max_rules=None) ===")
     print(sq4_df.round(4).to_string(index=False))
 
-    # Família 2 (Secundária): Ablação NO_W sem limite de regras (max_rules=None) e controlo de escala (max_rules=5)
+    # 2. Controlos secundários: NO_W sem limite (max_rules=None) e controlo de escala (max_rules=5 + defaults)
     now_unbounded_df = compare_synthetic_paired(
         df, family="SQ4_no_w_unbounded", var_a="FULL", var_b="NO_W", expected_max_rules=None, metric="accuracy", synth_streams=synth_streams
     )
     scale_df = compare_synthetic_paired(
         df, family="SQ4_scale_control_ref", var_a="FULL_REF", var_b="NO_W_REF", expected_max_rules=5, metric="accuracy", synth_streams=synth_streams
     )
-    print("\n=== 2. SECONDARY CONTROLS (NO_W max_rules=None & Scale Control max_rules=5) ===")
+    print("\n=== 2. SECONDARY CONTROLS (NO_W max_rules=None & Scale Control max_rules=5 + defaults) ===")
     print(pd.concat([now_unbounded_df, scale_df], ignore_index=True).round(4).to_string(index=False))
 
-    # Família 3 (Exploratória): Estimadores Incrementais vs FULL (max_rules=None)
+    # 3. Estimadores Incrementais vs FULL (max_rules=None)
     inc_dfs = []
     for inc_var in ["INC_FISHER_L2", "INC_L1_CENTROID", "INC_RELIEFF"]:
         inc_dfs.append(
@@ -209,7 +241,7 @@ def run_all_q4_stats(results_csv: str = "wf4_baseline_q4/results/wf4_runs.csv"):
     elec2_df = summarize_elec2_descriptive(df)
     sec_df = summarize_secondary_metrics(df)
 
-    print("\n=== 3. ELEC2 DESCRIPTIVE SUMMARY (Fixed Real Stream; std = permutation variability for SHUFFLED_W) ===")
+    print("\n=== 3. ELEC2 DESCRIPTIVE SUMMARY (Fixed Real Stream; NoChange=83.75% vs FULL=59.69%) ===")
     print(elec2_df.round(4).to_string(index=False))
 
     out_dir = Path("wf4_baseline_q4/results")
@@ -217,19 +249,19 @@ def run_all_q4_stats(results_csv: str = "wf4_baseline_q4/results/wf4_runs.csv"):
     pd.concat([sq4_df, now_unbounded_df, scale_df, inc_all], ignore_index=True).to_csv(out_dir / "sq4_summary_stats.csv", index=False)
     elec2_df.to_csv(out_dir / "elec2_descriptive_summary.csv", index=False)
     sec_df.to_csv(out_dir / "wf4_secondary_summary.csv", index=False)
+    elig_df.to_csv(out_dir / "sq4_eligibility_check.csv", index=False)
 
     mean_delta = sq4_df["delta"].mean()
     sig_count = int((sq4_df["p_holm"] < 0.05).sum())
-    med_r = sq4_df["r_rb"].median()
     elec_full = float(elec2_df.loc[elec2_df["variant"] == "FULL", "acc_mean_pct"].iloc[0])
-    elec_shuf = float(elec2_df.loc[elec2_df["variant"] == "SHUFFLED_W", "acc_mean_pct"].iloc[0])
+    elec_nc = float(elec2_df.loc[elec2_df["variant"] == "NoChange", "acc_mean_pct"].iloc[0])
 
     print("\n=== LaTeX Row for Table 1 (SQ4) ===")
     print(
         f"SQ4 (Info. Content) & FULL vs. SHUFFLED\\_W ($K=\\infty$) & "
-        f"$\\Delta\\text{{Acc}}_{{\\text{{synth}}}} = {mean_delta:+.2f}$ p.p. & "
-        f"{sig_count}/{len(synth_streams)} sig. ($p_{{\\text{{Holm}}}} < 0.05$, med. $r = {med_r:.2f}$; "
-        f"Elec2: {elec_full:.2f}\\% vs. {elec_shuf:.2f}\\%) \\\\"
+        f"{n_eligible}/{len(elig_df)} eligible ($\\Delta\\text{{Acc}}_{{\\text{{S1--S4}}}} = {mean_delta:+.2f}$ p.p.) & "
+        f"{sig_count}/{len(synth_streams)} sig. ($p_{{\\text{{Holm}}}} < 0.05$; all $\\le$ trivial baselines, "
+        f"e.g. Elec2: {elec_full:.2f}\\% vs. NoChange {elec_nc:.2f}\\%) \\\\"
     )
 
 

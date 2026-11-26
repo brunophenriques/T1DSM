@@ -64,7 +64,7 @@ class AblationWeightWrapper:
         perm = self.rng.permutation(d)
         if d > 1:
             identity = np.arange(d)
-            while np.array_equal(perm, identity):
+            while np.any(perm == identity):
                 perm = self.rng.permutation(d)
         self.perm = perm
         self._ones = np.ones(d, dtype=float)
