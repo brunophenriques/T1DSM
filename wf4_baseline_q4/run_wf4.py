@@ -1,5 +1,10 @@
+import os
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+
 import argparse
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, as_completed
 import csv
 import json
 import sys
@@ -26,12 +31,20 @@ from wf4_baseline_q4.incremental_weights import ENFUnimNeuronIncremental
 from wf4_baseline_q4.plots import plot_r1_heatmap, plot_rule_growth
 
 
+# Ground truth de relevância por stream sintético:
+# - S1: mudança abrupta em t=2000 de [f0, f1] para [f4, f5]
+# - S2: transição gradual entre t=1500 e t=2500 de [f0, f1] para [f2, f3]
+#       (pré-drift medido em t=1450 antes da rampa; recuperação medida após t=2500)
+# - S3: Agrawal fn=0 (age -> idx 0) para fn=2 (age, elevel -> idx [0, 3] em chaves ordenadas)
+# - S4: SEA variant 0 -> 2 (mudança apenas de limiar; [sea_att1, sea_att2] = [0, 1] mantêm-se)
 DRIFT_GROUND_TRUTH = {
-    "S1": {"drift_t": 2000, "pre_idx": [0, 1], "post_idx": [4, 5]},
-    "S2": {"drift_t": 2500, "pre_idx": [0, 1], "post_idx": [2, 3]},
-    "S3": {"drift_t": 2500, "pre_idx": [0], "post_idx": [0, 7]},     # age -> (age, salary)
-    "S4": {"drift_t": 2500, "pre_idx": [0, 1], "post_idx": [0, 1]},  # sea_att1, sea_att2 vs 4 noise features
+    "S1": {"pre_t": 1950, "drift_end": 2000, "pre_idx": [0, 1], "post_idx": [4, 5], "role": "abrupt_switch"},
+    "S2": {"pre_t": 1450, "drift_end": 2500, "pre_idx": [0, 1], "post_idx": [2, 3], "role": "gradual_switch"},
+    "S3": {"pre_t": 2450, "drift_end": 2500, "pre_idx": [0], "post_idx": [0, 3], "role": "non_monotonic_limitation"},
+    "S4": {"pre_t": 2450, "drift_end": 2500, "pre_idx": [0, 1], "post_idx": [0, 1], "role": "stationary_relevance_control"},
 }
+
+_STREAM_CACHE = {}
 
 
 class FastCausalMinMaxScaler:
@@ -147,6 +160,13 @@ def load_stream(name: str, seed: int, n_samples_override: int | None = None):
     raise ValueError(f"Stream desconhecida: {name}")
 
 
+def _get_stream_cached(ds: str, seed: int):
+    key = (ds, 0 if ds == "Elec2" else seed)
+    if key not in _STREAM_CACHE:
+        _STREAM_CACHE[key] = load_stream(ds, seed=key[1])
+    return _STREAM_CACHE[key]
+
+
 def build_model(variant: str, n_features: int, n_classes: int, seed: int):
     if variant == "FULL":
         base = attach_rule_event_counter(
@@ -186,6 +206,20 @@ def build_model(variant: str, n_features: int, n_classes: int, seed: int):
             )
         )
         return model, None
+    if variant == "INC_FISHER_L2_MATCHED":
+        # Controlo com memória efetiva emparelhada à janela de 200 amostras (alpha=0.01 -> N_eff ~ 199)
+        model = attach_rule_event_counter(
+            ENFUnimNeuronIncremental(
+                n_features=n_features,
+                n_classes=n_classes,
+                inc_method="INC_FISHER_L2",
+                alpha_inc=0.01,
+                update_rule_weights=False,
+                max_rules=None,
+                random_state=42,
+            )
+        )
+        return model, None
     if variant == "MajorityClass":
         return MajorityClassBaseline(n_classes=n_classes), None
     if variant == "NoChange":
@@ -205,6 +239,11 @@ def evaluate_single_run(
     use_causal_scaler: bool = True,
     first_step_zero_pred: bool = False,
 ):
+    """
+    Executa avaliação test-then-train medindo latência limpa (sem tracemalloc).
+    Regista tanto a aproximação por IDs de objeto como os contadores exatos de
+    criação, poda e fusão de regras (attach_rule_event_counter).
+    """
     n_samples, n_features = X.shape
     model, max_rules_val = build_model(variant, n_features, n_classes, seed)
     scaler = FastCausalMinMaxScaler(n_features) if use_causal_scaler else None
@@ -282,6 +321,7 @@ def evaluate_single_run(
 
 
 def measure_peak_memory_kb(X: np.ndarray, y: np.ndarray, n_classes: int, variant: str, seed: int = 0) -> float:
+    """Mede pico de memória Python via tracemalloc numa execução dedicada separada do tempo."""
     n_samples, n_features = X.shape
     tracemalloc.start()
     model, _ = build_model(variant, n_features, n_classes, seed)
@@ -300,7 +340,7 @@ def measure_peak_memory_kb(X: np.ndarray, y: np.ndarray, n_classes: int, variant
 
 def _eval_task(task):
     ds, var, seed = task
-    X, y, n_classes, _, _ = load_stream(ds, seed=seed)
+    X, y, n_classes, _, _ = _get_stream_cached(ds, seed)
     m, _ = evaluate_single_run(X, y, n_classes, variant=var, seed=seed, track_trajectory=False)
     return ds, var, seed, m
 
@@ -314,40 +354,40 @@ def _topk_precision(w: np.ndarray, true_idx: list[int]) -> float:
 def _drift_task(task):
     ds, var, seed = task
     gt = DRIFT_GROUND_TRUTH[ds]
-    drift_t = gt["drift_t"]
+    pre_t = gt["pre_t"]
+    drift_end = gt["drift_end"]
     pre_idx = gt["pre_idx"]
     post_idx = gt["post_idx"]
 
-    X, y, n_classes, _, _ = load_stream(ds, seed=seed)
+    X, y, n_classes, _, _ = _get_stream_cached(ds, seed)
     _, traj = evaluate_single_run(
         X, y, n_classes, variant=var, seed=seed, checkpoint_interval=50, track_trajectory=True
     )
     cps = np.asarray(traj["checkpoints"], dtype=int)
     W = traj["weights"]
 
-    pre_mask = cps == (drift_t - 50)
-    post50_mask = cps == (drift_t + 50)
-    post500_mask = cps == (drift_t + 500)
-
-    prec_pre = _topk_precision(W[pre_mask][0], pre_idx)
-    prec_post50 = _topk_precision(W[post50_mask][0], post_idx)
-    prec_post500 = _topk_precision(W[post500_mask][0], post_idx)
+    prec_pre = _topk_precision(W[cps == pre_t][0], pre_idx)
+    prec_post50 = _topk_precision(W[cps == (drift_end + 50)][0], post_idx)
+    prec_post500 = _topk_precision(W[cps == (drift_end + 500)][0], post_idx)
     prec_final = _topk_precision(W[-1], post_idx)
 
-    # Checkpoints após drift até 3 checkpoints consecutivos com top-k precision == 1.0
-    post_cps = cps[cps > drift_t]
-    post_W = W[cps > drift_t]
+    # Checkpoints após o fim do drift até 3 checkpoints consecutivos com top-k precision == 1.0
+    post_cps = cps[cps > drift_end]
+    post_W = W[cps > drift_end]
     post_precs = [_topk_precision(w_row, post_idx) for w_row in post_W]
     recovery_obs = np.nan
     for i in range(len(post_precs) - 2):
         if post_precs[i] == 1.0 and post_precs[i + 1] == 1.0 and post_precs[i + 2] == 1.0:
-            recovery_obs = float(post_cps[i] - drift_t)
+            recovery_obs = float(post_cps[i] - drift_end)
             break
 
     return {
         "dataset": ds,
+        "role": gt["role"],
         "variant": var,
         "seed": seed,
+        "pre_checkpoint": pre_t,
+        "post_origin": drift_end,
         "k_pre": len(pre_idx),
         "k_post": len(post_idx),
         "topk_prec_pre_drift": prec_pre,
@@ -361,15 +401,23 @@ def _drift_task(task):
 def run_drift_ranking_study(out_csv: str = "wf4_baseline_q4/results/sq4_drift_ranking_recovery.csv", workers: int = 1):
     t0 = time.perf_counter()
     streams = ["S1", "S2", "S3", "S4"]
-    variants = ["FULL", "INC_FISHER_L2", "INC_L1_CENTROID", "INC_RELIEFF"]
+    variants = ["FULL", "INC_FISHER_L2", "INC_FISHER_L2_MATCHED", "INC_L1_CENTROID", "INC_RELIEFF"]
     seeds = list(range(10))
     tasks = [(ds, var, s) for ds in streams for var in variants for s in seeds]
 
+    rows = []
     if workers > 1:
         with ProcessPoolExecutor(max_workers=workers) as ex:
-            rows = list(ex.map(_drift_task, tasks))
+            futs = [ex.submit(_drift_task, t) for t in tasks]
+            for idx, fut in enumerate(as_completed(futs), 1):
+                rows.append(fut.result())
+                if idx % 25 == 0 or idx == len(tasks):
+                    print(f"  [drift-ranking] {idx}/{len(tasks)} concluídos ({time.perf_counter() - t0:.1f}s)", flush=True)
     else:
-        rows = [_drift_task(t) for t in tasks]
+        for idx, t in enumerate(tasks, 1):
+            rows.append(_drift_task(t))
+            if idx % 25 == 0 or idx == len(tasks):
+                print(f"  [drift-ranking] {idx}/{len(tasks)} concluídos ({time.perf_counter() - t0:.1f}s)", flush=True)
 
     df_raw = pd.DataFrame(rows)
     out_path = Path(out_csv)
@@ -377,7 +425,7 @@ def run_drift_ranking_study(out_csv: str = "wf4_baseline_q4/results/sq4_drift_ra
     df_raw.to_csv(out_path, index=False)
 
     summary = (
-        df_raw.groupby(["dataset", "variant"], sort=False)
+        df_raw.groupby(["dataset", "role", "variant"], sort=False)
         .agg(
             topk_pre_mean=("topk_prec_pre_drift", "mean"),
             topk_post50_mean=("topk_prec_post_50", "mean"),
@@ -392,18 +440,18 @@ def run_drift_ranking_study(out_csv: str = "wf4_baseline_q4/results/sq4_drift_ra
     summary.to_csv(summary_path, index=False)
     print("\n=== POST-DRIFT TOP-K FEATURE RANKING RECOVERY (S1-S4, 10 seeds) ===")
     print(summary.round(4).to_string(index=False))
-    print(f"Saved -> {out_path} and {summary_path} in {time.perf_counter() - t0:.2f}s")
+    print(f"Saved -> {out_path} and {summary_path} in {time.perf_counter() - t0:.2f}s", flush=True)
 
 
 def run_refresh_variants(
     variants_to_refresh: list[str],
     out_csv: str = "wf4_baseline_q4/results/wf4_runs.csv",
     workers: int = 1,
+    recompute_mem: bool = False,
 ):
     t0 = time.perf_counter()
     out_path = Path(out_csv)
     df_existing = pd.read_csv(out_path)
-    # Preserva max_rules como string ("None" ou "5") para compatibilidade exata com read_csv
     df_existing["max_rules"] = df_existing["max_rules"].fillna("None").astype(str)
     for col, default_val in [
         ("rules_created_exact", df_existing["rules_created_id_approx"]),
@@ -419,16 +467,33 @@ def run_refresh_variants(
 
     mem_map = {}
     for ds in streams:
-        X0, y0, n_cls0, _, _ = load_stream(ds, seed=0)
         for var in variants_to_refresh:
-            mem_map[(ds, var)] = measure_peak_memory_kb(X0, y0, n_cls0, variant=var, seed=0)
+            prev_mem = df_existing.loc[
+                (df_existing["dataset"] == ds) & (df_existing["variant"] == var) & (df_existing["seed"] == 0),
+                "peak_mem_kb",
+            ]
+            if not recompute_mem and len(prev_mem) > 0 and pd.notna(prev_mem.iloc[0]):
+                mem_map[(ds, var)] = float(prev_mem.iloc[0])
+            else:
+                X0, y0, n_cls0, _, _ = _get_stream_cached(ds, 0)
+                mem_map[(ds, var)] = measure_peak_memory_kb(X0, y0, n_cls0, variant=var, seed=0)
 
     tasks = [(ds, var, s) for ds in streams for var in variants_to_refresh for s in seeds]
+    print(f"A atualizar {len(tasks)} runs ({variants_to_refresh}) com workers={workers}...", flush=True)
+
+    results = []
     if workers > 1:
         with ProcessPoolExecutor(max_workers=workers) as ex:
-            results = list(ex.map(_eval_task, tasks))
+            futs = [ex.submit(_eval_task, t) for t in tasks]
+            for idx, fut in enumerate(as_completed(futs), 1):
+                results.append(fut.result())
+                if idx % 15 == 0 or idx == len(tasks):
+                    print(f"  [refresh] {idx}/{len(tasks)} runs concluídos ({time.perf_counter() - t0:.1f}s)", flush=True)
     else:
-        results = [_eval_task(t) for t in tasks]
+        for idx, t in enumerate(tasks, 1):
+            results.append(_eval_task(t))
+            if idx % 15 == 0 or idx == len(tasks):
+                print(f"  [refresh] {idx}/{len(tasks)} runs concluídos ({time.perf_counter() - t0:.1f}s)", flush=True)
 
     new_rows = []
     for ds, var, seed, m in results:
@@ -453,7 +518,7 @@ def run_refresh_variants(
     df_merged = df_merged.sort_values(["ds_rank", "seed", "var_rank"]).drop(columns=["ds_rank", "var_rank"])
 
     df_merged.to_csv(out_path, index=False)
-    print(f"Refreshed {variants_to_refresh} in {out_path} ({len(df_merged)} rows) in {time.perf_counter() - t0:.2f}s")
+    print(f"Refreshed {variants_to_refresh} in {out_path} ({len(df_merged)} rows) in {time.perf_counter() - t0:.2f}s", flush=True)
 
 
 def run_demo(config_path: str):
@@ -590,6 +655,7 @@ if __name__ == "__main__":
         help="Compute post-drift Top-k feature ranking recovery across S1-S4 (10 seeds)",
     )
     parser.add_argument("--workers", type=int, default=1, help="Parallel worker processes for refresh/drift")
+    parser.add_argument("--recompute-mem", action="store_true", help="Re-measure peak_mem_kb during --refresh-variants")
     parser.add_argument("--out-csv", type=str, default="wf4_baseline_q4/results/wf4_runs.csv")
     args = parser.parse_args()
 
@@ -598,7 +664,9 @@ if __name__ == "__main__":
     elif args.full_sq4:
         run_full_sq4(out_csv=args.out_csv)
     elif args.refresh_variants:
-        run_refresh_variants(args.refresh_variants, out_csv=args.out_csv, workers=args.workers)
+        run_refresh_variants(
+            args.refresh_variants, out_csv=args.out_csv, workers=args.workers, recompute_mem=args.recompute_mem
+        )
     elif args.drift_ranking:
         run_drift_ranking_study(workers=args.workers)
     else:
