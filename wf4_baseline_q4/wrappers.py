@@ -2,6 +2,41 @@ from collections import Counter
 import numpy as np
 
 
+def attach_rule_event_counter(model):
+    """
+    Instrumenta _create_rule e _maybe_merge_last_rule na instância sem editar
+    ENF_UnimNeuron_Safe.py, contando criações, podas imediatas e fusões reais.
+    """
+    if getattr(model, "_has_rule_counter", False):
+        return model
+    model.rules_created_exact = 0
+    model.rules_evicted_exact = 0
+    model.rules_merged_exact = 0
+
+    orig_create = model._create_rule
+    orig_merge = model._maybe_merge_last_rule
+
+    def counted_create(x, y, sigma):
+        n_before = len(model.rules)
+        orig_create(x, y, sigma)
+        n_after = len(model.rules)
+        model.rules_created_exact += 1
+        if n_after <= n_before:
+            model.rules_evicted_exact += 1
+
+    def counted_merge():
+        n_before = len(model.rules)
+        orig_merge()
+        n_after = len(model.rules)
+        if n_after < n_before:
+            model.rules_merged_exact += (n_before - n_after)
+
+    model._create_rule = counted_create
+    model._maybe_merge_last_rule = counted_merge
+    model._has_rule_counter = True
+    return model
+
+
 class MajorityClassBaseline:
     """Baseline prequencial que prevê sempre a classe mais frequente observada até t-1."""
 
@@ -48,9 +83,9 @@ class AblationWeightWrapper:
     Wrapper não-intrusivo sobre EvolvingNeuroFuzzyUnimSafe (nunca edita o core):
       - FULL: mantém o modelo original intacto (previsões e regras idênticas).
       - NO_W: força pesos unitários (1.0) em regras novas, existentes e fundidas.
-      - SHUFFLED_W: aplica uma permutação fixa não-trivial por execução (determinada
-        pela seed, nunca escolhida pela accuracy), preservando os valores do vetor
-        de pesos na criação, atualização e fusão de regras.
+      - SHUFFLED_W: aplica um derangement fixo por execução (pi(j) != j para todo j,
+        determinado pela seed, nunca escolhido pela accuracy), preservando os valores
+        do vetor de pesos na criação, atualização e fusão de regras.
     """
 
     def __init__(self, base_model, mode: str = "FULL", seed: int = 0):
@@ -82,6 +117,18 @@ class AblationWeightWrapper:
     @property
     def current_feature_weights(self) -> np.ndarray:
         return self.model.current_feature_weights
+
+    @property
+    def rules_created_exact(self) -> int:
+        return int(getattr(self.model, "rules_created_exact", 0))
+
+    @property
+    def rules_evicted_exact(self) -> int:
+        return int(getattr(self.model, "rules_evicted_exact", 0))
+
+    @property
+    def rules_merged_exact(self) -> int:
+        return int(getattr(self.model, "rules_merged_exact", 0))
 
     def _transform_vec(self, w: np.ndarray) -> np.ndarray:
         if self.mode == "NO_W":

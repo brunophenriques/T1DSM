@@ -41,6 +41,10 @@ def validate_runs_dataframe(df: pd.DataFrame) -> None:
         "rules_created_id_approx", "rules_deleted_id_approx",
         "rule_turnover_id_approx", "ms_per_sample",
     ]
+    for optional_exact in ["rules_created_exact", "rules_evicted_exact", "rules_merged_exact", "rule_turnover_exact"]:
+        if optional_exact in df.columns:
+            metric_cols.append(optional_exact)
+
     assert not df[metric_cols].isna().any().any(), "Existem NaN nas métricas numéricas!"
     assert np.isfinite(df[metric_cols].to_numpy(dtype=float)).all(), "Existem valores não finitos nas métricas!"
 
@@ -154,13 +158,14 @@ def compare_synthetic_paired(
 
 def summarize_elec2_descriptive(df: pd.DataFrame) -> pd.DataFrame:
     sub = df[df["dataset"] == "Elec2"].copy()
+    has_exact = "rule_turnover_exact" in sub.columns
     rows = []
     for var, grp in sub.groupby("variant", sort=False):
         acc_pct = grp["accuracy"].to_numpy(dtype=float) * 100.0
         f1_pct = grp["macro_f1"].to_numpy(dtype=float) * 100.0
         lat = grp["ms_per_sample"].to_numpy(dtype=float)
         mem = grp["peak_mem_kb"].dropna().to_numpy(dtype=float)
-        rows.append({
+        row = {
             "variant": var,
             "max_rules": "None" if pd.isna(grp["max_rules"].iloc[0]) else int(grp["max_rules"].iloc[0]),
             "acc_mean_pct": float(acc_pct.mean()),
@@ -171,16 +176,22 @@ def summarize_elec2_descriptive(df: pd.DataFrame) -> pd.DataFrame:
             "ms_per_sample_mean": float(lat.mean()),
             "ms_per_sample_std": float(lat.std(ddof=1)),
             "peak_mem_kb_seed0": float(mem[0]) if len(mem) > 0 else np.nan,
-        })
+        }
+        if has_exact:
+            row["rules_created_exact"] = int(grp["rules_created_exact"].iloc[0])
+            row["rules_merged_exact"] = int(grp["rules_merged_exact"].iloc[0])
+            row["rule_turnover_exact"] = int(grp["rule_turnover_exact"].iloc[0])
+        rows.append(row)
     return pd.DataFrame(rows)
 
 
 def summarize_secondary_metrics(df: pd.DataFrame) -> pd.DataFrame:
-    """Resumo secundário completo (inclui NO_W sem limite de regras, macro-F1, regras, turnover e recursos)."""
+    """Resumo secundário completo (NO_W sem limite, macro-F1, regras, turnover exato/aprox e recursos)."""
+    has_exact = "rule_turnover_exact" in df.columns
     rows = []
     for (ds, var), grp in df.groupby(["dataset", "variant"], sort=False):
         mem = grp["peak_mem_kb"].dropna().to_numpy(dtype=float)
-        rows.append({
+        row = {
             "dataset": ds,
             "variant": var,
             "max_rules": "None" if pd.isna(grp["max_rules"].iloc[0]) else int(grp["max_rules"].iloc[0]),
@@ -191,7 +202,12 @@ def summarize_secondary_metrics(df: pd.DataFrame) -> pd.DataFrame:
             "turnover_id_approx_mean": float(grp["rule_turnover_id_approx"].mean()),
             "ms_per_sample_mean": float(grp["ms_per_sample"].mean()),
             "peak_mem_kb_seed0": float(mem[0]) if len(mem) > 0 else np.nan,
-        })
+        }
+        if has_exact:
+            row["rules_created_exact_mean"] = float(grp["rules_created_exact"].mean())
+            row["rules_merged_exact_mean"] = float(grp["rules_merged_exact"].mean())
+            row["rule_turnover_exact_mean"] = float(grp["rule_turnover_exact"].mean())
+        rows.append(row)
     return pd.DataFrame(rows)
 
 
