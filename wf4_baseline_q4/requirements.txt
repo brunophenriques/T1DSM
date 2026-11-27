@@ -1,0 +1,8 @@
+numpy
+scipy
+pandas
+matplotlib
+tqdm
+river==0.26.1
+evolvingfuzzysystems==0.1.5
+pytest

@@ -73,6 +73,10 @@ python exp_ablation.py
 
 ---
 
+## How to run T17 (Workflow 4: SQ4 & Incremental Feature Distances)
+
+See [`wf4_baseline_q4/README.md`](wf4_baseline_q4/README.md) for installation, E0 equivalence, demo, benchmark, and statistical reproduction instructions.
+
 ## 🔍 Interpretability & Rules
 
 Each UnimNeuron corresponds to the **antecedent of a fuzzy rule**.

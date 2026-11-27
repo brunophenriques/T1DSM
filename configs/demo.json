@@ -1,0 +1,12 @@
+{
+  "experiment_name": "t17_demo_r1_heatmap",
+  "stream": "S1_abrupt_switch",
+  "n_samples": 1500,
+  "checkpoint_interval": 25,
+  "seed": 0,
+  "variants": ["FULL", "SHUFFLED_W", "NO_W", "INC_FISHER_L2"],
+  "outputs": {
+    "heatmap_path": "wf4_baseline_q4/results/demo_r1_heatmap.png",
+    "rule_growth_path": "wf4_baseline_q4/results/demo_rule_growth.png"
+  }
+}

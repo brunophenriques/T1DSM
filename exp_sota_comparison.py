@@ -107,8 +107,11 @@ try:
     HAS_ENF_ADVANCED = True
 except Exception:
     HAS_ENF_ADVANCED = False
-
-from enfs_uni0_evolving import ENFSUni0Evolving  # optional, if you re-enable
+    
+try:
+    from enfs_uni0_evolving import ENFSUni0Evolving
+except ImportError:
+    ENFSUni0Evolving = None
 
 # Optional: UnimNeuron-based variants (if present in repository)
 try:
